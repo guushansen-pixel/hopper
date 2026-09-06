@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.4" -VersionCode 5 -Force
+              -VersionName "1.5" -VersionCode 6 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -158,3 +158,29 @@ Template von `apk-builder` schaltet dafuer "Force Dark" ab. Der Tag- und
 Nachtwechsel im Spiel ist davon unabhaengig. Wer stattdessen dem Systemmodus
 folgen will, kann `matchMedia("(prefers-color-scheme: dark)")` auswerten und
 `night` beim Start entsprechend setzen.
+
+## Liquid-Glass-Menue
+
+Panel, Eckknoepfe, Schalter und Kacheln sind durchscheinendes Material statt
+flacher Farbflaechen: `backdrop-filter: blur(26px) saturate(185%)`, dazu eine
+helle Lichtkante oben (inset box-shadow), ein diagonaler Glanzstreifen
+(`::after`, `mix-blend-mode: overlay`, `pointer-events: none`) und Knoepfe,
+die auf demselben Prinzip aufbauen. Nur `.panel` traegt den vollen Blur - die
+Eckknoepfe liegen bereits auf unscharfem Grund und sparen sich den eigenen
+`backdrop-filter`, das waere bei einem 60fps-Canvas darunter ein zweiter,
+spuerbar teurer Blur-Layer fuer kaum sichtbaren Zusatznutzen.
+
+**Ein Fehlversuch unterwegs:** Die Glas-Fuellung (`--glassFill` etc.) sollte
+zuerst themenunabhaengig bleiben, nach dem Gedanken "backdrop-filter zieht die
+Farbe schon automatisch aus der Szene dahinter". Rechnerisch gepruefte, dann
+verworfene Idee: derselbe halbtransparente Weissschleier ergab ueber dem sehr
+dunklen Nachthimmel nur ein mittleres Grau (Panel-Luminanz ~0.42), und mit dem
+hellen Nacht-Text blieb der Kontrast bei ~2,0:1 - unter brauchbaren 3:1. Die
+Fuellung braucht bei Nacht also doch eine eigene, dunklere Farbe (weiterhin
+durchscheinend, nur ein dunkler statt heller Schleier): `UI_DAY`/`UI_NIGHT`
+tragen jetzt `glassFill`/`glassBtn`/`glassSoft`/`rimTop`/`rimBot`/`sheen`
+zusaetzlich zu den bisherigen Werten. Nachkontrast damit rechnerisch ~7,9:1.
+
+`@supports not (backdrop-filter: blur(1px))` faellt auf einen blickdichten
+`--solidPanel` zurueck, der ebenfalls Tag/Nacht folgt - sonst waere der Text
+in Browsern ohne Blur-Unterstuetzung bei Nacht unlesbar auf hellem Grund.
