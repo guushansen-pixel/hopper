@@ -31,6 +31,10 @@
     display: flex; align-items: center; justify-content: center;
     padding: 20px calc(20px + env(safe-area-inset-right))
              calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+    /* Das Overlay deckt den ganzen Bildschirm ab und liegt im DOM hinter den
+       Eckknoepfen. Ohne die Staffelung faengt es deren Klicks ab - das
+       Zahnrad war dadurch unerreichbar. */
+    z-index: 10;
   }
   .overlay[hidden] { display: none !important; }
 
@@ -44,6 +48,11 @@
     box-shadow: 0 18px 50px var(--shadow);
     text-align: center;
     max-height: 100%; overflow-y: auto;
+    /* body hat touch-action:none, damit das Spiel nicht mitscrollt. Fuer das
+       Panel muss das zurueckgenommen werden, sonst laesst sich ein zu hohes
+       Menue auf kleinen Bildschirmen nicht scrollen. */
+    touch-action: pan-y;
+    overscroll-behavior: contain;
   }
   .title { font-size: 36px; font-weight: 800; letter-spacing: -0.025em; }
   .tag { color: var(--soft); font-size: 13px; margin-top: 1px; }
@@ -67,7 +76,8 @@
 
   /* Zahnrad in der Ecke - fuehrt in die Einstellungen */
   #gearBtn, #pauseBtn {
-    position: fixed; width: 46px; height: 46px; border-radius: 14px;
+    position: fixed; z-index: 20;
+    width: 46px; height: 46px; border-radius: 14px;
     margin: 0; padding: 0;
     background: var(--panel); color: var(--ink);
     border: 1px solid var(--panelBorder);
@@ -145,10 +155,17 @@
 <canvas id="c"></canvas>
 
 <button id="gearBtn" hidden aria-label="Einstellungen">
-  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
-       stroke-width="2" stroke-linecap="round">
-    <circle cx="12" cy="12" r="4.2"/>
-    <path d="M12 1.9v3M12 19.1v3M1.9 12h3M19.1 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M4.9 19.1l2.2-2.2M16.9 7.1l2.2-2.2"/>
+  <!-- Zahnrad: geschlossene Kontur mit acht Zaehnen, Nabe per evenodd
+       ausgestanzt. Eine Kreislinie mit abstehenden Strichen sah aus wie
+       eine Sonne, nicht wie ein Zahnrad. -->
+  <svg viewBox="0 0 24 24" width="23" height="23" fill="currentColor">
+    <path fill-rule="evenodd" d="M17.92 9.85 21.26 9.86 21.26 14.14 17.92 14.15
+      17.71 14.66 20.06 17.03 17.03 20.06 14.66 17.71 14.15 17.92 14.14 21.26
+      9.86 21.26 9.85 17.92 9.34 17.71 6.97 20.06 3.94 17.03 6.29 14.66
+      6.08 14.15 2.74 14.14 2.74 9.86 6.08 9.85 6.29 9.34 3.94 6.97
+      6.97 3.94 9.34 6.29 9.85 6.08 9.86 2.74 14.14 2.74 14.15 6.08
+      14.66 6.29 17.03 3.94 20.06 6.97 17.71 9.34 Z
+      M12 8.55 A3.45 3.45 0 1 0 12 15.45 A3.45 3.45 0 1 0 12 8.55 Z"/>
   </svg>
 </button>
 

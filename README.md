@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.2" -VersionCode 3 -Force
+              -VersionName "1.3" -VersionCode 4 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -106,3 +106,26 @@ Gemessen: 15 Minuten bis Hoechsttempo, 896 Spruenge, 0 Zusammenstoesse.
 Die Android-Zurueck-Taste fuehrt ins Menue statt die App zu beenden. Dafuer
 legt `startGame()` einen `history.pushState` an - die WebView-Activity ruft
 dann `goBack()`, was `popstate` ausloest.
+
+## Staffelung der Bedienelemente
+
+`.overlay` deckt mit `inset: 0` den ganzen Bildschirm ab und steht im DOM
+hinter den Eckknoepfen. Ohne `z-index` (Overlay 10, Knoepfe 20) faengt es
+deren Klicks ab - das Zahnrad war dadurch sichtbar, aber tot.
+
+Wer hier etwas ergaenzt, sollte den Klickweg pruefen und nicht nur den
+Handler aufrufen. `document.elementFromPoint` auf die Mitte des Elements
+zeigt, was dort tatsaechlich liegt:
+
+```js
+var r = el.getBoundingClientRect();
+var hit = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
+// hit muss el oder ein Kind davon sein
+```
+
+Ein Test, der `openSettings()` direkt aufruft, laeuft an genau diesem
+Fehler vorbei.
+
+`.panel` setzt ausserdem `touch-action: pan-y`, weil `body` auf
+`touch-action: none` steht. Ohne die Ausnahme laesst sich ein Menue, das
+hoeher als der Bildschirm ist, auf dem Geraet nicht scrollen.
