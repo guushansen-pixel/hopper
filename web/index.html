@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Hopper</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #eef1f5;
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script>
+"use strict";
+
+// ============================================================== Canvas =====
+var cv  = document.getElementById("c");
+var ctx = cv.getContext("2d");
+
+var W = 0, H = 0;
+var unit = 1;              // CSS-Pixel je logischer Einheit
+var LW = 0, LH = 0;        // Spielfeld in logischen Einheiten
+var groundY = 0;
+var dpr = 1;
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 3);
+  W = cv.clientWidth;
+  H = cv.clientHeight;
+  cv.width  = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+
+  unit = Math.min(W / 620, H / 320);
+  if (unit < 0.35) { unit = 0.35; }
+
+  LW = W / unit;
+  LH = H / unit;
+  groundY = Math.round(LH * 0.70);
+
+  buildStars();
+  ctx.imageSmoothingEnabled = true;
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 120); });
+
+// ============================================================== Farben =====
+var DAY = {
+  skyTop: "#dfe7f1", skyBot: "#f4f6f9",
+  duneFar: "#d3dae4", duneNear: "#bfc8d4",
+  ink: "#343a40", soft: "#98a1ac", ground: "#69707a",
+  dust: "#b3bcc7", orb: "#f3c664", star: "#ffffff", groundFill: "#eff3f8",
+  accent: "#d93025"
+};
+var NIGHT = {
+  skyTop: "#070a10", skyBot: "#141b25",
+  duneFar: "#1b222d", duneNear: "#262f3c",
+  ink: "#e6e9ee", soft: "#5e6874", ground: "#8b939d",
+  dust: "#39424f", orb: "#e8eef7", star: "#ffffff", groundFill: "#090d13",
+  accent: "#ff6f61"
+};
+var theme = {};
+
+function mix(a, b, t) {
+  var ai = parseInt(a.slice(1), 16), bi = parseInt(b.slice(1), 16);
+  var ar = (ai >> 16) & 255, ag = (ai >> 8) & 255, ab = ai & 255;
+  var br = (bi >> 16) & 255, bg = (bi >> 8) & 255, bb = bi & 255;
+  return "rgb(" + Math.round(ar + (br - ar) * t) + "," +
+                  Math.round(ag + (bg - ag) * t) + "," +
+                  Math.round(ab + (bb - ab) * t) + ")";
+}
+function applyTheme(t) {
+  for (var k in DAY) {
+    if (Object.prototype.hasOwnProperty.call(DAY, k)) { theme[k] = mix(DAY[k], NIGHT[k], t); }
+  }
+  document.body.style.background = theme.skyBot;
+}
+
+// ========================================================== Spielwerte =====
+// Asymmetrische Schwerkraft: langsam hoch, schnell runter. Das ist der
+// groesste einzelne Unterschied im Sprunggefuehl - symmetrische Schwerkraft
+// fuehlt sich schwammig an, weil man ewig auf die Landung wartet.
+var GRAV_UP    = 2350;
+var GRAV_DOWN  = 3500;
+var GRAV_FAST  = 7200;     // beim Ducken in der Luft: bewusstes Abbrechen
+var JUMP_V     = -770;
+var JUMP_CUT   = 0.45;
+var JUMP_CUT_MIN = -520;   // kuerzester Tipp erreicht 65 - raeumt jeden Bodengegner (max. 50)
+
+// Kleine Fenster, die den Unterschied zwischen "unfair" und "mein Fehler"
+// ausmachen. Beide sind Standard in Plattformern und fallen nur auf, wenn
+// sie fehlen.
+var COYOTE_TIME  = 0.09;   // Sprung kurz NACH dem Verlassen der Kante
+var JUMP_BUFFER  = 0.13;   // Sprung kurz VOR der Landung gedrueckt
+
+var SPEED_START = 330;
+var SPEED_MAX   = 960;
+var SPEED_RAMP  = 15;
+var RUNNER_X    = 70;
+
+var HIGH_KEY = "hopper.highscore";
+
+var state, runner, obstacles, clouds, pebbles, particles, stars;
+var lastTime = 0, night = 0, nightDir = 0, nextNightAt = 700;
+var scrollFar = 0, scrollNear = 0;
+
+// ============================================================ Aufbau =======
+function buildStars() {
+  stars = [];
+  var n = Math.round(LW / 9);
+  for (var i = 0; i < n; i++) {
+    stars.push({
+      x: Math.random() * LW,
+      y: Math.random() * (groundY * 0.72),
+      r: 0.6 + Math.random() * 1.1,
+      p: Math.random() * 6.28
+    });
+  }
+}
+
+function newGame(keepHigh) {
+  var high = keepHigh ? state.high : readHigh();
+  state = {
+    phase: "ready",
+    speed: SPEED_START,
+    distance: 0,
+    score: 0,
+    high: high,
+    time: 0,
+    spawnIn: 90,
+    blink: 0,
+    shake: 0,
+    flash: 0,          // Meilenstein-Blinken
+    deadT: 0
+  };
+  runner = {
+    y: 0, vy: 0,
+    w: 44, h: 47,
+    ducking: false,
+    onGround: true,
+    coyote: COYOTE_TIME,   // ein Tipp im ersten Frame soll sofort springen
+    buffer: 0,
+    legT: 0,
+    frame: 0,
+    squash: 0,         // >0 gestaucht (Landung)
+    dustT: 0
+  };
+  obstacles = [];
+  particles = [];
+  clouds = [];
+  pebbles = [];
+  for (var i = 0; i < 6; i++) {
+    clouds.push({ x: Math.random() * LW, y: 26 + Math.random() * (groundY * 0.42), s: 0.25 + Math.random() * 0.4, w: 34 + Math.random() * 30 });
+  }
+  for (var j = 0; j < 46; j++) {
+    pebbles.push({ x: Math.random() * LW, y: groundY + 5 + Math.random() * 18, w: 1 + Math.random() * 3.5 });
+  }
+  scrollFar = 0; scrollNear = 0;
+  night = 0; nightDir = 0; nextNightAt = 700;
+  applyTheme(0);
+}
+
+function readHigh() {
+  try {
+    var v = parseInt(localStorage.getItem(HIGH_KEY) || "0", 10);
+    return isNaN(v) ? 0 : v;
+  } catch (e) { return 0; }
+}
+function writeHigh(v) {
+  try { localStorage.setItem(HIGH_KEY, String(v)); } catch (e) {}
+}
+
+// ========================================================= Partikel ========
+function spawnParticle(x, y, vx, vy, life, size, color) {
+  if (particles.length > 160) { return; }
+  particles.push({ x: x, y: y, vx: vx, vy: vy, t: life, max: life, s: size, c: color });
+}
+
+function dustPuff(x, y, n, power) {
+  for (var i = 0; i < n; i++) {
+    spawnParticle(
+      x + (Math.random() - 0.5) * 12,
+      y - Math.random() * 4,
+      -state.speed * 0.12 - Math.random() * power,
+      -Math.random() * power * 0.8,
+      0.28 + Math.random() * 0.32,
+      1.4 + Math.random() * 2.4,
+      "dust"
+    );
+  }
+}
+
+function deathBurst(x, y) {
+  for (var i = 0; i < 16; i++) {
+    var a = Math.random() * Math.PI * 2;
+    var sp = 90 + Math.random() * 220;
+    spawnParticle(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 90,
+                  0.45 + Math.random() * 0.45, 2 + Math.random() * 2.6, "accent");
+  }
+}
+
+// ======================================================== Hindernisse ======
+function spawnObstacle() {
+  if (state.score > 320 && Math.random() < 0.24) {
+    var hs = [groundY - 80, groundY - 54, groundY - 26];
+    obstacles.push({ kind: "bird", x: LW + 20, y: hs[Math.floor(Math.random() * hs.length)],
+                     w: 38, h: 26, flap: Math.random() * 6 });
+    return;
+  }
+  var tall = Math.random() < 0.45;
+  var count = 1 + Math.floor(Math.random() * (state.score > 180 ? 3 : 2));
+  var cw = tall ? 17 : 15;
+  var ch = tall ? 50 : 36;
+  var gap = 4;
+  obstacles.push({
+    kind: "cactus", x: LW + 20, y: groundY - ch,
+    w: count * cw + (count - 1) * gap, h: ch,
+    count: count, cw: cw, ch: ch, gap: gap
+  });
+}
+
+function obstacleGap() {
+  var base = state.speed * 0.60;
+  return base + Math.random() * base * 0.80;
+}
+
+// ============================================================ Update =======
+function doJump() {
+  runner.vy = JUMP_V;
+  runner.onGround = false;
+  runner.coyote = 0;
+  runner.buffer = 0;
+  runner.squash = -0.6;                        // kurze Streckung beim Absprung
+  dustPuff(RUNNER_X + 20, groundY, 6, 120);
+}
+
+function update(dt) {
+  state.time += dt;
+  if (state.shake > 0) { state.shake = Math.max(0, state.shake - dt * 2.6); }
+  if (state.flash > 0) { state.flash = Math.max(0, state.flash - dt); }
+  if (state.phase === "dead") { state.deadT += dt; }
+
+  // --- Fortschritt ---
+  if (state.phase === "running") {
+    state.speed = Math.min(SPEED_MAX, state.speed + SPEED_RAMP * dt);
+    state.distance += state.speed * dt;
+    var prev = state.score;
+    state.score = Math.floor(state.distance / 14);
+    if (Math.floor(state.score / 100) > Math.floor(prev / 100) && state.score > 0) {
+      state.flash = 1.0;
+    }
+    if (state.score >= nextNightAt) {
+      nextNightAt += 700;
+      nightDir = (night > 0.5) ? -1 : 1;
+    }
+  }
+  if (nightDir !== 0) {
+    night += nightDir * dt * 0.55;
+    if (night >= 1) { night = 1; nightDir = 0; }
+    if (night <= 0) { night = 0; nightDir = 0; }
+    applyTheme(night);
+  }
+
+  // --- Zeitfenster ---
+  if (runner.onGround) { runner.coyote = COYOTE_TIME; }
+  else if (runner.coyote > 0) { runner.coyote -= dt; }
+  if (runner.buffer > 0) { runner.buffer -= dt; }
+
+  // --- Schwerkraft ---
+  var g = GRAV_UP;
+  if (runner.vy > 0) { g = runner.ducking ? GRAV_FAST : GRAV_DOWN; }
+  runner.vy += g * dt;
+  runner.y += runner.vy * dt;
+
+  if (runner.y >= 0) {
+    var landing = !runner.onGround;
+    runner.y = 0;
+    runner.onGround = true;
+    // Sofort wieder sprungbereit: sonst faellt ein Tipp direkt nach der
+    // Landung in den Puffer und geht einen Frame spaeter los.
+    runner.coyote = COYOTE_TIME;
+    if (landing) {
+      var impact = Math.min(1, Math.abs(runner.vy) / 900);
+      runner.squash = 0.35 + impact * 0.5;
+      state.shake = Math.max(state.shake, impact * 0.20);
+      dustPuff(RUNNER_X + 20, groundY, 5 + Math.round(impact * 7), 130 + impact * 110);
+    }
+    runner.vy = 0;
+    // gepufferter Sprung loest bei der Landung aus
+    if (runner.buffer > 0 && !runner.ducking && state.phase === "running") { doJump(); }
+  }
+
+  // --- Stauchung abklingen ---
+  if (runner.squash > 0) { runner.squash = Math.max(0, runner.squash - dt * 4.2); }
+  else if (runner.squash < 0) { runner.squash = Math.min(0, runner.squash + dt * 3.4); }
+
+  // --- Lauf-Animation + Laufstaub ---
+  if (state.phase !== "dead") {
+    runner.legT += dt * (state.phase === "running" ? state.speed / 42 : 7);
+    runner.frame = Math.floor(runner.legT) % 4;
+  }
+  if (state.phase === "running" && runner.onGround && !runner.ducking) {
+    runner.dustT -= dt;
+    if (runner.dustT <= 0) {
+      runner.dustT = 0.085;
+      dustPuff(RUNNER_X + 8, groundY, 1, 55);
+    }
+  }
+
+  // --- Partikel ---
+  for (var pi = particles.length - 1; pi >= 0; pi--) {
+    var p = particles[pi];
+    p.t -= dt;
+    if (p.t <= 0) { particles.splice(pi, 1); continue; }
+    p.vy += 520 * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+
+  if (state.phase === "ready") { state.blink += dt; }
+  if (state.phase !== "running") { return; }
+
+  // --- Welt scrollen ---
+  var dx = state.speed * dt;
+  scrollFar  += dx * 0.10;
+  scrollNear += dx * 0.24;
+
+  var i;
+  for (i = 0; i < clouds.length; i++) {
+    clouds[i].x -= dx * clouds[i].s * 0.22;
+    if (clouds[i].x < -140) {
+      clouds[i].x = LW + Math.random() * 90;
+      clouds[i].y = 26 + Math.random() * (groundY * 0.42);
+      clouds[i].s = 0.25 + Math.random() * 0.4;
+      clouds[i].w = 34 + Math.random() * 30;
+    }
+  }
+  for (i = 0; i < pebbles.length; i++) {
+    pebbles[i].x -= dx;
+    if (pebbles[i].x < -8) {
+      pebbles[i].x = LW + Math.random() * 40;
+      pebbles[i].y = groundY + 5 + Math.random() * 18;
+    }
+  }
+
+  state.spawnIn -= dx;
+  if (state.spawnIn <= 0) { spawnObstacle(); state.spawnIn = obstacleGap(); }
+
+  for (i = obstacles.length - 1; i >= 0; i--) {
+    var o = obstacles[i];
+    o.x -= dx;
+    if (o.kind === "bird") { o.flap += dt * 10; }
+    if (o.x + o.w < -20) { obstacles.splice(i, 1); continue; }
+    if (hits(o)) { die(); return; }
+  }
+}
+
+function hits(o) {
+  var pad = 5;
+  var rw = runner.ducking ? 59 : runner.w;
+  var rh = runner.ducking ? 30 : runner.h;
+  var rx = RUNNER_X + pad;
+  var ry = groundY - rh + runner.y + pad;
+  rw -= pad * 2;
+  rh -= pad * 2;
+  return rx < o.x + o.w - 2 && rx + rw > o.x + 2 &&
+         ry < o.y + o.h - 2 && ry + rh > o.y + 2;
+}
+
+function die() {
+  state.phase = "dead";
+  state.deadT = 0;
+  state.shake = 1;
+  deathBurst(RUNNER_X + 24, groundY - 26 + runner.y);
+  if (state.score > state.high) { state.high = state.score; writeHigh(state.high); }
+}
+
+// =========================================================== Zeichnen ======
+function roundRect(x, y, w, h, r) {
+  if (w < 2 * r) { r = w / 2; }
+  if (h < 2 * r) { r = h / 2; }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawSky() {
+  var g = ctx.createLinearGradient(0, 0, 0, groundY);
+  g.addColorStop(0, theme.skyTop);
+  g.addColorStop(1, theme.skyBot);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, LW, LH);
+}
+
+function drawStars() {
+  if (night < 0.04) { return; }
+  ctx.fillStyle = theme.star;
+  for (var i = 0; i < stars.length; i++) {
+    var s = stars[i];
+    var tw = 0.55 + 0.45 * Math.sin(state.time * 1.6 + s.p);
+    ctx.globalAlpha = night * tw * 0.85;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Sonne bei Tag, Mond bei Nacht - gleiche Position, der Mond bekommt eine
+// ausgestanzte Sichel.
+function drawOrb() {
+  var ox = LW * 0.80, oy = groundY * 0.24, r = 21;
+  ctx.fillStyle = theme.orb;
+  ctx.globalAlpha = 0.30;
+  ctx.beginPath(); ctx.arc(ox, oy, r * 1.7, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.arc(ox, oy, r, 0, 6.2832); ctx.fill();
+  if (night > 0.25) {
+    ctx.globalAlpha = (night - 0.25) / 0.75;
+    ctx.fillStyle = theme.skyTop;
+    ctx.beginPath(); ctx.arc(ox + r * 0.52, oy - r * 0.30, r * 0.88, 0, 6.2832); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Zwei Duenenlagen mit unterschiedlichem Tempo - erzeugt Tiefe, kostet fast
+// nichts. Die Amplitude variiert deterministisch ueber den Index, damit die
+// Silhouette nicht wie eine Wellenlinie aussieht.
+function drawDunes(scroll, baseY, amp, step, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  var x0 = -(((scroll % step) + step) % step);
+  // Nur bis zur Bodenlinie fuellen: die Duenen sind Silhouetten am Horizont,
+  // nicht der Boden. Sonst deckt die vordere Lage die ganze untere Bildhaelfte
+  // zu und die Kiesel darauf verlieren ihren Kontrast.
+  ctx.moveTo(x0, groundY);
+  ctx.lineTo(x0, baseY);
+  for (var x = x0; x < LW + step; x += step) {
+    var idx = Math.round((x + scroll) / step);
+    var a = amp * (0.45 + 0.55 * Math.abs(Math.sin(idx * 2.399963)));
+    ctx.quadraticCurveTo(x + step / 2, baseY - a, x + step, baseY);
+  }
+  ctx.lineTo(LW + step, groundY);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawClouds() {
+  ctx.fillStyle = theme.soft;
+  for (var i = 0; i < clouds.length; i++) {
+    var c = clouds[i];
+    ctx.globalAlpha = (0.20 + c.s * 0.28) * (1 - night * 0.55);
+    roundRect(c.x, c.y, c.w, 11, 5.5);
+    roundRect(c.x + c.w * 0.22, c.y - 7, c.w * 0.55, 12, 6);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawGround() {
+  ctx.fillStyle = theme.groundFill;
+  ctx.fillRect(-4, groundY, LW + 8, LH - groundY + 4);
+
+  ctx.strokeStyle = theme.ground;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY + 1);
+  ctx.lineTo(LW, groundY + 1);
+  ctx.stroke();
+
+  ctx.fillStyle = theme.soft;
+  for (var i = 0; i < pebbles.length; i++) {
+    var p = pebbles[i];
+    ctx.fillRect(p.x, p.y, p.w, 1.6);
+  }
+}
+
+function drawParticles() {
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    var a = p.t / p.max;
+    ctx.globalAlpha = a * (p.c === "accent" ? 1 : 0.62);
+    ctx.fillStyle = (p.c === "accent") ? theme.accent : theme.dust;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.s * (0.35 + a * 0.65), 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Vier-Phasen-Laufzyklus statt zwei: die Beine schwingen sichtbar durch,
+// statt nur zu wechseln.
+var LEGS = [
+  [13, 7], [10, 11], [7, 13], [10, 11]
+];
+
+function drawRunner() {
+  var dead = (state.phase === "dead");
+  var baseY = groundY + runner.y;
+
+  // Stauchen/Strecken um den Fusspunkt
+  var sq = runner.squash;
+  var sy = 1 - sq * 0.30;
+  var sx = 1 + sq * 0.22;
+  if (!runner.onGround && !dead) {
+    var st = Math.min(0.16, Math.abs(runner.vy) / 5200);
+    sy += st; sx -= st * 0.8;
+  }
+
+  ctx.save();
+  ctx.translate(RUNNER_X + 22, baseY);
+  ctx.scale(sx, sy);
+  ctx.translate(-(RUNNER_X + 22), -baseY);
+
+  ctx.fillStyle = theme.ink;
+
+  if (runner.ducking && !dead) {
+    var w = 59, h = 30, x = RUNNER_X, y = baseY - h;
+    roundRect(x + 2, y + 6, w - 16, h - 6, 9);
+    roundRect(x + w - 22, y, 22, 19, 8);
+    roundRect(x + w - 5, y + 8, 8, 6, 3);
+    roundRect(x - 8, y + 9, 13, 6, 3);
+    ctx.fillStyle = theme.skyBot;
+    roundRect(x + w - 13, y + 5, 4.5, 4.5, 2.2);
+    ctx.fillStyle = theme.ink;
+    var lp = (runner.frame % 2 === 0) ? 0 : 8;
+    roundRect(x + 10 + lp, y + h - 2, 9, 6, 3);
+    roundRect(x + 28 - lp, y + h - 2, 9, 6, 3);
+    ctx.restore();
+    return;
+  }
+
+  var bw = 30, bh = 26;
+  var bx = RUNNER_X + 6, by = baseY - 34;
+
+  // Schwanz wippt im Lauf
+  var tailUp = (runner.frame === 1 || runner.frame === 3) ? -2 : 0;
+  roundRect(bx - 13, by + 6 + tailUp, 16, 7, 3.5);
+  roundRect(bx, by, bw, bh, 10);
+
+  var hx = bx + bw - 8, hy = by - 16;
+  roundRect(hx, hy, 22, 20, 9);
+  roundRect(hx + 3, hy - 7 + tailUp * 0.5, 6, 10, 3);   // Ohr
+  roundRect(hx + 18, hy + 8, 9, 7, 3);                  // Schnauze
+
+  ctx.fillStyle = theme.skyBot;
+  if (dead) {
+    ctx.save();
+    ctx.strokeStyle = theme.skyBot;
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(hx + 10, hy + 5); ctx.lineTo(hx + 16, hy + 11);
+    ctx.moveTo(hx + 16, hy + 5); ctx.lineTo(hx + 10, hy + 11);
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    roundRect(hx + 11, hy + 5, 5, 5, 2.5);
+  }
+  ctx.fillStyle = theme.ink;
+
+  if (!runner.onGround || dead) {
+    roundRect(bx + 4,  by + bh - 2, 9, 11, 4);
+    roundRect(bx + 17, by + bh - 2, 9, 8, 4);
+  } else {
+    var L = LEGS[runner.frame];
+    roundRect(bx + 3,  by + bh - 2, 9, L[0], 4);
+    roundRect(bx + 18, by + bh - 2, 9, L[1], 4);
+  }
+  ctx.restore();
+}
+
+function drawCactus(o) {
+  ctx.fillStyle = theme.ground;
+  for (var i = 0; i < o.count; i++) {
+    var x = o.x + i * (o.cw + o.gap);
+    var h = o.ch - (i % 2 === 1 ? 6 : 0);
+    var y = groundY - h;
+    roundRect(x, y, o.cw, h, o.cw / 2.4);
+    roundRect(x - 6, y + h * 0.32, 7, 5, 2.5);
+    roundRect(x - 6, y + h * 0.32, 5, h * 0.30, 2.5);
+    roundRect(x + o.cw - 1, y + h * 0.50, 7, 5, 2.5);
+    roundRect(x + o.cw + 1, y + h * 0.22, 5, h * 0.32, 2.5);
+  }
+}
+
+function drawBird(o) {
+  ctx.fillStyle = theme.ground;
+  var up = Math.floor(o.flap) % 2 === 0;
+  roundRect(o.x + 8, o.y + 10, 24, 9, 4.5);
+  roundRect(o.x + 28, o.y + 6, 11, 10, 4);
+  roundRect(o.x + 37, o.y + 10, 6, 4, 2);
+  if (up) { roundRect(o.x + 9,  o.y - 3, 19, 9, 4.5); }
+  else    { roundRect(o.x + 9,  o.y + 16, 19, 9, 4.5); }
+}
+
+function pad5(n) {
+  var s = String(n);
+  while (s.length < 5) { s = "0" + s; }
+  return s;
+}
+
+function drawHud() {
+  ctx.font = "600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  var right = LW - 18;
+
+  if (state.high > 0) {
+    ctx.fillStyle = theme.soft;
+    ctx.fillText("HI " + pad5(state.high), right - 78, 18);
+  }
+  // Meilenstein: Punktestand blinkt kurz
+  var show = true;
+  if (state.flash > 0) { show = Math.floor(state.flash * 9) % 2 === 0; }
+  if (show) {
+    ctx.fillStyle = (state.flash > 0) ? theme.accent : theme.ink;
+    ctx.fillText(pad5(state.score), right, 18);
+  }
+}
+
+function drawCenterText(title, sub) {
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = theme.ink;
+  ctx.font = "700 27px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+  ctx.fillText(title, LW / 2, groundY - 100);
+  if (sub) {
+    ctx.fillStyle = theme.soft;
+    ctx.font = "500 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.fillText(sub, LW / 2, groundY - 72);
+  }
+}
+
+function render() {
+  ctx.setTransform(unit * dpr, 0, 0, unit * dpr, 0, 0);
+
+  drawSky();
+  drawStars();
+  drawOrb();
+
+  // Bildschirmruettler nur auf die Spielebene, nicht auf den Himmel
+  if (state.shake > 0.001) {
+    var m = state.shake * state.shake * 7;
+    ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
+  }
+
+  drawDunes(scrollFar,  groundY - 26, 34, 190, theme.duneFar);
+  drawDunes(scrollNear, groundY - 8,  22, 130, theme.duneNear);
+  drawClouds();
+  drawGround();
+
+  for (var i = 0; i < obstacles.length; i++) {
+    if (obstacles[i].kind === "bird") { drawBird(obstacles[i]); }
+    else { drawCactus(obstacles[i]); }
+  }
+
+  drawParticles();
+  drawRunner();
+
+  ctx.setTransform(unit * dpr, 0, 0, unit * dpr, 0, 0);
+  drawHud();
+
+  if (state.phase === "ready") {
+    drawCenterText("Hopper", Math.floor(state.blink * 1.5) % 2 === 0 ? "Tippen oder Leertaste zum Starten" : "");
+  } else if (state.phase === "dead" && state.deadT > 0.35) {
+    drawCenterText("Vorbei", "Tippen oder Leertaste fuer neu");
+  }
+}
+
+// ========================================================== Steuerung ======
+function jump() {
+  if (state.phase === "ready") { state.phase = "running"; return; }
+  if (state.phase === "dead") {
+    if (state.deadT < 0.35) { return; }        // versehentliche Sofort-Neustarts
+    newGame(true);
+    state.phase = "running";
+    return;
+  }
+  if (runner.ducking) { return; }
+  if (runner.coyote > 0) { doJump(); }
+  else { runner.buffer = JUMP_BUFFER; }
+}
+
+function endJump() {
+  if (runner.vy < 0) {
+    runner.vy = Math.max(runner.vy, Math.min(runner.vy * JUMP_CUT, JUMP_CUT_MIN));
+  }
+}
+
+function setDuck(on) {
+  if (state.phase !== "running") { return; }
+  if (on && !runner.ducking && runner.onGround) { dustPuff(RUNNER_X + 26, groundY, 4, 90); }
+  runner.ducking = on;
+}
+
+document.addEventListener("keydown", function (e) {
+  if (e.repeat) { return; }
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") { e.preventDefault(); jump(); }
+  else if (e.code === "ArrowDown" || e.code === "KeyS") { e.preventDefault(); setDuck(true); }
+});
+document.addEventListener("keyup", function (e) {
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") { endJump(); }
+  else if (e.code === "ArrowDown" || e.code === "KeyS") { setDuck(false); }
+});
+
+cv.addEventListener("touchstart", function (e) {
+  e.preventDefault();
+  var t = e.changedTouches[0];
+  if (t.clientY > H * 0.66 && state.phase === "running") { setDuck(true); }
+  else { jump(); }
+}, { passive: false });
+cv.addEventListener("touchend", function (e) {
+  e.preventDefault(); setDuck(false); endJump();
+}, { passive: false });
+cv.addEventListener("touchcancel", function () { setDuck(false); });
+
+cv.addEventListener("mousedown", function (e) {
+  e.preventDefault();
+  if (e.clientY > H * 0.66 && state.phase === "running") { setDuck(true); } else { jump(); }
+});
+cv.addEventListener("mouseup", function () { setDuck(false); endJump(); });
+
+// ============================================================== Loop =======
+function frame(now) {
+  if (!lastTime) { lastTime = now; }
+  var dt = (now - lastTime) / 1000;
+  lastTime = now;
+  if (dt > 0.05) { dt = 0.05; }
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+resize();
+newGame(false);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
