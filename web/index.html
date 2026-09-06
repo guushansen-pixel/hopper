@@ -6,13 +6,13 @@
 <title>Hopper</title>
 <style>
   :root {
-    --ink: #343a40;
-    --soft: #98a1ac;
-    --panel: rgba(255, 255, 255, 0.86);
-    --panelBorder: rgba(0, 0, 0, 0.10);
-    --accent: #d93025;
-    --btn: rgba(0, 0, 0, 0.06);
+    --ink: #343a40; --soft: #98a1ac; --accent: #d93025;
+    --panel: rgba(255,255,255,0.88);
+    --panelBorder: rgba(0,0,0,0.10);
+    --btn: rgba(0,0,0,0.06);
     --btnOn: #4c9a5a;
+    --shadow: rgba(0,0,0,0.16);
+    --sel: #343a40;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -24,47 +24,66 @@
     -webkit-user-select: none; user-select: none;
     touch-action: none; overscroll-behavior: none;
   }
-  canvas { display: block; width: 100%; height: 100%; }
+  canvas#c { display: block; width: 100%; height: 100%; }
 
   .overlay {
     position: fixed; inset: 0;
     display: flex; align-items: center; justify-content: center;
-    padding: 24px calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+    padding: 20px calc(20px + env(safe-area-inset-right))
+             calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
   }
   .overlay[hidden] { display: none !important; }
 
   .panel {
-    width: 100%; max-width: 340px;
+    width: 100%; max-width: 344px;
     background: var(--panel);
     border: 1px solid var(--panelBorder);
-    border-radius: 20px;
-    padding: 26px 22px 22px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 18px 50px rgba(0,0,0,0.16);
+    border-radius: 22px;
+    padding: 24px 22px 20px;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 18px 50px var(--shadow);
     text-align: center;
+    max-height: 100%; overflow-y: auto;
   }
-  .title { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; }
-  .tag { color: var(--soft); font-size: 13px; margin-top: 2px; }
-  .scores {
-    display: flex; gap: 10px; margin: 18px 0 20px;
-    font-variant-numeric: tabular-nums;
-  }
-  .scores div {
-    flex: 1; background: var(--btn); border-radius: 12px; padding: 10px 6px;
-  }
+  .title { font-size: 36px; font-weight: 800; letter-spacing: -0.025em; }
+  .tag { color: var(--soft); font-size: 13px; margin-top: 1px; }
+
+  .scores { display: flex; gap: 10px; margin: 18px 0 18px; font-variant-numeric: tabular-nums; }
+  .scores div { flex: 1; background: var(--btn); border-radius: 13px; padding: 10px 6px; }
   .scores span { display: block; font-size: 11px; color: var(--soft);
                  letter-spacing: .07em; text-transform: uppercase; }
   .scores b { font-size: 21px; font-weight: 700; }
 
   button {
     -webkit-appearance: none; appearance: none; border: 0; font: inherit;
-    width: 100%; padding: 14px 16px; border-radius: 13px;
+    width: 100%; padding: 14px 16px; border-radius: 14px;
     background: var(--btn); color: var(--ink);
     font-weight: 600; cursor: pointer; margin-top: 9px;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
   }
   button.primary { background: var(--ink); color: var(--panel); font-size: 17px; }
   button:active { transform: scale(0.985); }
+  svg { flex: 0 0 auto; }
+
+  /* Zahnrad in der Ecke - fuehrt in die Einstellungen */
+  #gearBtn, #pauseBtn {
+    position: fixed; width: 46px; height: 46px; border-radius: 14px;
+    margin: 0; padding: 0;
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--panelBorder);
+    box-shadow: 0 6px 18px var(--shadow);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  #gearBtn {
+    top: calc(16px + env(safe-area-inset-top));
+    right: calc(16px + env(safe-area-inset-right));
+  }
+  #pauseBtn {
+    top: calc(14px + env(safe-area-inset-top));
+    left: calc(14px + env(safe-area-inset-left));
+    width: 42px; height: 42px; opacity: .72;
+  }
+  #gearBtn[hidden], #pauseBtn[hidden] { display: none !important; }
 
   .row {
     display: flex; align-items: center; justify-content: space-between;
@@ -89,23 +108,35 @@
   .switch[aria-checked="true"] { background: var(--btnOn); }
   .switch[aria-checked="true"]::after { transform: translateX(20px); }
 
-  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
   .head h2 { font-size: 19px; font-weight: 700; flex: 1; text-align: left; }
-  .back {
-    width: 38px; height: 38px; border-radius: 10px; margin: 0;
-    padding: 0; font-size: 19px; line-height: 1;
-  }
+  .back { width: 40px; height: 40px; border-radius: 12px; margin: 0; padding: 0; font-size: 19px; }
 
-  /* Pause-Knopf im Spiel */
-  #pauseBtn {
-    position: fixed;
-    top: calc(12px + env(safe-area-inset-top));
-    left: calc(12px + env(safe-area-inset-left));
-    width: 42px; height: 42px; border-radius: 12px; margin: 0; padding: 0;
-    background: var(--btn); color: var(--ink);
-    font-size: 15px; line-height: 1; opacity: .55;
+  /* Garderobe */
+  #pv {
+    display: block; margin: 10px auto 4px;
+    width: 150px; height: 104px;
+    background: var(--btn); border-radius: 15px;
   }
-  #pauseBtn[hidden] { display: none !important; }
+  .grpLabel {
+    text-align: left; font-size: 11px; color: var(--soft);
+    letter-spacing: .07em; text-transform: uppercase;
+    margin: 16px 0 8px; font-weight: 600;
+  }
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+  .sw {
+    width: 100%; aspect-ratio: 1 / 1; border-radius: 50%;
+    margin: 0; padding: 0; border: 3px solid transparent;
+    background-clip: padding-box; position: relative;
+  }
+  .sw[aria-pressed="true"] { border-color: var(--sel); }
+  .hats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
+  .hat {
+    margin: 0; padding: 9px 2px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; background: var(--btn);
+    border: 2px solid transparent; flex-direction: column; gap: 2px;
+  }
+  .hat[aria-pressed="true"] { border-color: var(--sel); }
 
   .hint { color: var(--soft); font-size: 12px; margin-top: 14px; line-height: 1.6; }
 </style>
@@ -113,9 +144,22 @@
 <body>
 <canvas id="c"></canvas>
 
-<button id="pauseBtn" hidden aria-label="Pause">II</button>
+<button id="gearBtn" hidden aria-label="Einstellungen">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4.2"/>
+    <path d="M12 1.9v3M12 19.1v3M1.9 12h3M19.1 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M4.9 19.1l2.2-2.2M16.9 7.1l2.2-2.2"/>
+  </svg>
+</button>
 
-<!-- Hauptmenue -->
+<button id="pauseBtn" hidden aria-label="Pause">
+  <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor">
+    <rect x="7" y="5" width="3.6" height="14" rx="1.4"/>
+    <rect x="13.4" y="5" width="3.6" height="14" rx="1.4"/>
+  </svg>
+</button>
+
+<!-- Lobby -->
 <div class="overlay" id="menu">
   <div class="panel">
     <div class="title">Hopper</div>
@@ -125,8 +169,31 @@
       <div><span>Zuletzt</span><b id="mLast">00000</b></div>
     </div>
     <button class="primary" id="btnPlay">Spielen</button>
-    <button id="btnSettings">Einstellungen</button>
+    <button id="btnWardrobe">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 8.2V10"/>
+        <path d="M12 8.2a2.1 2.1 0 1 1 2.1-2.1"/>
+        <path d="M12 10 3.9 15.6a1.1 1.1 0 0 0 .6 2h15a1.1 1.1 0 0 0 .6-2L12 10z"/>
+      </svg>
+      Garderobe
+    </button>
     <div class="hint">Tippen zum Springen, laenger halten springt hoeher.<br>Unteres Bilddrittel halten zum Ducken.</div>
+  </div>
+</div>
+
+<!-- Garderobe -->
+<div class="overlay" id="wardrobe" hidden>
+  <div class="panel">
+    <div class="head">
+      <button class="back" id="wBack" aria-label="Zurueck">&larr;</button>
+      <h2>Garderobe</h2>
+    </div>
+    <canvas id="pv"></canvas>
+    <div class="grpLabel">Farbe</div>
+    <div class="swatches" id="swatches"></div>
+    <div class="grpLabel">Kopf</div>
+    <div class="hats" id="hats"></div>
   </div>
 </div>
 
@@ -137,7 +204,6 @@
       <button class="back" id="btnBack" aria-label="Zurueck">&larr;</button>
       <h2>Einstellungen</h2>
     </div>
-
     <div class="row">
       <span class="lbl">Musik<span class="sub">Hintergrundmelodie</span></span>
       <button class="switch" id="swMusic" role="switch" aria-checked="true" aria-label="Musik"></button>
@@ -154,7 +220,6 @@
       <span class="lbl">Tag- und Nachtwechsel<span class="sub">Farbwechsel alle 700 Punkte</span></span>
       <button class="switch" id="swCycle" role="switch" aria-checked="true" aria-label="Tag- und Nachtwechsel"></button>
     </div>
-
     <button id="btnReset">Bestwert zuruecksetzen</button>
   </div>
 </div>
@@ -162,7 +227,7 @@
 <!-- Pause -->
 <div class="overlay" id="paused" hidden>
   <div class="panel">
-    <div class="title" style="font-size:26px">Pause</div>
+    <div class="title" style="font-size:27px">Pause</div>
     <div class="scores">
       <div><span>Punkte</span><b id="pScore">00000</b></div>
       <div><span>Bestwert</span><b id="pHigh">00000</b></div>
@@ -176,7 +241,7 @@
 <!-- Game Over -->
 <div class="overlay" id="over" hidden>
   <div class="panel">
-    <div class="title" style="font-size:26px" id="overTitle">Vorbei</div>
+    <div class="title" style="font-size:27px" id="overTitle">Vorbei</div>
     <div class="tag" id="overTag">&nbsp;</div>
     <div class="scores">
       <div><span>Punkte</span><b id="oScore">00000</b></div>
@@ -193,6 +258,8 @@
 // ============================================================== Canvas =====
 var cv  = document.getElementById("c");
 var ctx = cv.getContext("2d");
+var pv  = document.getElementById("pv");
+var pctx = pv.getContext("2d");
 
 var W = 0, H = 0, unit = 1, LW = 0, LH = 0, groundY = 0, dpr = 1;
 
@@ -204,6 +271,7 @@ function resize() {
   if (unit < 0.35) { unit = 0.35; }
   LW = W / unit; LH = H / unit;
   groundY = Math.round(LH * 0.70);
+  pv.width = Math.round(150 * dpr); pv.height = Math.round(104 * dpr);
   buildStars();
   ctx.imageSmoothingEnabled = true;
 }
@@ -225,6 +293,26 @@ var NIGHT = {
   dust: "#39424f", orb: "#e8eef7", star: "#ffffff", groundFill: "#090d13",
   accent: "#ff6f61"
 };
+
+// Die Oberflaeche wandert mit derselben Zahl mit wie die Spielwelt. Frueher
+// kippten Panel, Rahmen und Knoepfe bei 50 Prozent hart um - mitten im
+// Uebergang passte das Menue dann nicht mehr zum Hintergrund. Jetzt wird
+// jeder Wert durchgehend interpoliert, Deckkraft eingeschlossen.
+var UI_DAY = {
+  panel:       [255, 255, 255, 0.88],
+  panelBorder: [0, 0, 0, 0.10],
+  btn:         [0, 0, 0, 0.06],
+  btnOn:       [76, 154, 90, 1],
+  shadow:      [0, 0, 0, 0.16]
+};
+var UI_NIGHT = {
+  panel:       [20, 26, 35, 0.90],
+  panelBorder: [255, 255, 255, 0.12],
+  btn:         [255, 255, 255, 0.09],
+  btnOn:       [95, 191, 114, 1],
+  shadow:      [0, 0, 0, 0.50]
+};
+
 var theme = {};
 
 function mix(a, b, t) {
@@ -235,43 +323,78 @@ function mix(a, b, t) {
                   Math.round(ag + (bg - ag) * t) + "," +
                   Math.round(ab + (bb - ab) * t) + ")";
 }
+function mixRgba(a, b, t) {
+  return "rgba(" + Math.round(a[0] + (b[0] - a[0]) * t) + "," +
+                   Math.round(a[1] + (b[1] - a[1]) * t) + "," +
+                   Math.round(a[2] + (b[2] - a[2]) * t) + "," +
+                   (a[3] + (b[3] - a[3]) * t).toFixed(3) + ")";
+}
+
+var lastCssT = -1;
 function applyTheme(t) {
   for (var k in DAY) {
     if (Object.prototype.hasOwnProperty.call(DAY, k)) { theme[k] = mix(DAY[k], NIGHT[k], t); }
   }
   document.body.style.background = theme.skyBot;
-  // Menue-Farben mitziehen, damit die Oberflaeche nachts nicht blendet
+
+  // CSS-Variablen nur bei spuerbarer Aenderung schreiben - waehrend des
+  // Uebergangs laeuft applyTheme sonst 60-mal je Sekunde durch den Style-Recalc.
+  if (Math.abs(t - lastCssT) < 0.02 && t !== 0 && t !== 1) { return; }
+  lastCssT = t;
   var r = document.documentElement.style;
   r.setProperty("--ink", theme.ink);
   r.setProperty("--soft", theme.soft);
   r.setProperty("--accent", theme.accent);
-  r.setProperty("--panel", t > 0.5 ? "rgba(22,28,37,0.88)" : "rgba(255,255,255,0.88)");
-  r.setProperty("--panelBorder", t > 0.5 ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)");
-  r.setProperty("--btn", t > 0.5 ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.06)");
+  r.setProperty("--sel", theme.ink);
+  for (var u in UI_DAY) {
+    if (Object.prototype.hasOwnProperty.call(UI_DAY, u)) {
+      r.setProperty("--" + u, mixRgba(UI_DAY[u], UI_NIGHT[u], t));
+    }
+  }
 }
 
 // ========================================================= Einstellungen ===
 var SET_KEY  = "hopper.settings";
+var LOOK_KEY = "hopper.look";
 var HIGH_KEY = "hopper.highscore";
 var LAST_KEY = "hopper.last";
 
 var settings = { music: true, sfx: true, shake: true, cycle: true };
+var look = { color: "auto", hat: "none" };
 
-function loadSettings() {
+// Farben, die sowohl auf hellem als auch auf dunklem Grund lesbar bleiben -
+// deshalb durchweg mittlere Helligkeit, keine sehr hellen oder dunklen Toene.
+var COLORS = [
+  { id: "auto",    name: "Standard", hex: null },
+  { id: "terra",   name: "Terrakotta", hex: "#e4703a" },
+  { id: "teal",    name: "Petrol",     hex: "#2a9d8f" },
+  { id: "violet",  name: "Violett",    hex: "#7c6bd9" },
+  { id: "amber",   name: "Bernstein",  hex: "#dfa22b" },
+  { id: "rose",    name: "Rose",       hex: "#dc5a78" },
+  { id: "green",   name: "Gruen",      hex: "#4c9a5a" },
+  { id: "blue",    name: "Blau",       hex: "#4a90d9" }
+];
+var HATS = [
+  { id: "none",    name: "ohne" },
+  { id: "cap",     name: "Cap" },
+  { id: "top",     name: "Zylinder" },
+  { id: "band",    name: "Band" },
+  { id: "goggles", name: "Brille" }
+];
+
+function loadJson(key, target) {
   try {
-    var raw = localStorage.getItem(SET_KEY);
-    if (raw) {
-      var o = JSON.parse(raw);
-      for (var k in settings) {
-        if (Object.prototype.hasOwnProperty.call(settings, k) && typeof o[k] === "boolean") {
-          settings[k] = o[k];
-        }
-      }
+    var raw = localStorage.getItem(key);
+    if (!raw) { return; }
+    var o = JSON.parse(raw);
+    for (var k in target) {
+      if (Object.prototype.hasOwnProperty.call(target, k) &&
+          typeof o[k] === typeof target[k]) { target[k] = o[k]; }
     }
   } catch (e) {}
 }
-function saveSettings() {
-  try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch (e) {}
+function saveJson(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
 }
 function readNum(key) {
   try { var v = parseInt(localStorage.getItem(key) || "0", 10); return isNaN(v) ? 0 : v; }
@@ -280,18 +403,20 @@ function readNum(key) {
 function writeNum(key, v) {
   try { localStorage.setItem(key, String(v)); } catch (e) {}
 }
+function lookColor() {
+  if (look.color === "auto") { return theme.ink; }
+  for (var i = 0; i < COLORS.length; i++) {
+    if (COLORS[i].id === look.color && COLORS[i].hex) { return COLORS[i].hex; }
+  }
+  return theme.ink;
+}
 
 // ================================================================ Audio ====
-// Alles wird zur Laufzeit synthetisiert - die App bringt keine Audiodateien
-// mit und braucht daher weder Speicherplatz noch Netz.
 var AC = null, masterGain = null, sfxGain = null, musicGain = null, noiseBuf = null;
 var audioReady = false;
 
 function audioInit() {
-  if (audioReady) {
-    if (AC && AC.state === "suspended") { AC.resume(); }
-    return;
-  }
+  if (audioReady) { if (AC && AC.state === "suspended") { AC.resume(); } return; }
   var Ctor = window.AudioContext || window.webkitAudioContext;
   if (!Ctor) { return; }
   try {
@@ -299,39 +424,32 @@ function audioInit() {
     masterGain = AC.createGain(); masterGain.gain.value = 0.9; masterGain.connect(AC.destination);
     sfxGain    = AC.createGain(); sfxGain.gain.value = 0.55;   sfxGain.connect(masterGain);
     musicGain  = AC.createGain(); musicGain.gain.value = 0.0;  musicGain.connect(masterGain);
-
     var n = Math.floor(AC.sampleRate * 0.4);
     noiseBuf = AC.createBuffer(1, n, AC.sampleRate);
     var d = noiseBuf.getChannelData(0);
     for (var i = 0; i < n; i++) { d[i] = Math.random() * 2 - 1; }
-
     audioReady = true;
     if (AC.state === "suspended") { AC.resume(); }
   } catch (e) { audioReady = false; }
 }
 
-function tone(type, f0, f1, dur, vol, dest) {
+function tone(type, f0, f1, dur, vol) {
   if (!audioReady || !settings.sfx) { return; }
-  var t = AC.currentTime;
-  var o = AC.createOscillator();
-  var g = AC.createGain();
+  var t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
   o.type = type;
   o.frequency.setValueAtTime(f0, t);
   if (f1 !== f0) { o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur); }
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g); g.connect(dest || sfxGain);
+  o.connect(g); g.connect(sfxGain);
   o.start(t); o.stop(t + dur + 0.02);
 }
-
 function noise(dur, vol, freq, q) {
   if (!audioReady || !settings.sfx) { return; }
-  var t = AC.currentTime;
-  var s = AC.createBufferSource(); s.buffer = noiseBuf;
-  var f = AC.createBiquadFilter(); f.type = "bandpass";
-  f.frequency.value = freq; f.Q.value = q || 1;
-  var g = AC.createGain();
+  var t = AC.currentTime, s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = noiseBuf;
+  f.type = "bandpass"; f.frequency.value = freq; f.Q.value = q || 1;
   g.gain.setValueAtTime(vol, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   s.connect(f); f.connect(g); g.connect(sfxGain);
@@ -344,28 +462,21 @@ var SFX = {
   duck:  function () { tone("square", 260, 150, 0.07, 0.20); },
   point: function () { tone("square", 880, 880, 0.07, 0.22); setTimeout(function () { tone("square", 1320, 1320, 0.09, 0.20); }, 75); },
   die:   function () { tone("sawtooth", 420, 70, 0.55, 0.42); noise(0.35, 0.22, 420, 0.6); },
-  ui:    function () { tone("square", 620, 620, 0.045, 0.16); }
+  ui:    function () { tone("square", 620, 620, 0.045, 0.16); },
+  equip: function () { tone("triangle", 520, 780, 0.09, 0.20); }
 };
 
 // --------------------------------------------------------------- Musik ----
-// Kleiner Sequencer mit Vorausplanung: setInterval allein waere fuer Musik
-// zu ungenau, deshalb werden Noten anhand der Audio-Uhr vorausgelegt.
 var music = { on: false, step: 0, next: 0, timer: null, bpm: 126 };
-
-// A-Moll-Pentatonik ueber vier Akkorde - vermeidet Dissonanzen ohne
-// Musiktheorie im Code.
 var CHORDS = [
-  [220.00, 261.63, 329.63],   // Am
-  [174.61, 220.00, 261.63],   // F
-  [261.63, 329.63, 392.00],   // C
-  [196.00, 246.94, 293.66]    // G
+  [220.00, 261.63, 329.63], [174.61, 220.00, 261.63],
+  [261.63, 329.63, 392.00], [196.00, 246.94, 293.66]
 ];
 var BASS = [110.00, 87.31, 130.81, 98.00];
 
 function musicNote(type, freq, at, dur, vol) {
   var o = AC.createOscillator(), g = AC.createGain();
-  o.type = type;
-  o.frequency.setValueAtTime(freq, at);
+  o.type = type; o.frequency.setValueAtTime(freq, at);
   g.gain.setValueAtTime(0.0001, at);
   g.gain.exponentialRampToValueAtTime(vol, at + 0.012);
   g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
@@ -373,42 +484,34 @@ function musicNote(type, freq, at, dur, vol) {
   o.start(at); o.stop(at + dur + 0.02);
 }
 function musicNoise(at, dur, vol, freq) {
-  var s = AC.createBufferSource(); s.buffer = noiseBuf;
-  var f = AC.createBiquadFilter(); f.type = "highpass"; f.frequency.value = freq;
-  var g = AC.createGain();
+  var s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = noiseBuf;
+  f.type = "highpass"; f.frequency.value = freq;
   g.gain.setValueAtTime(vol, at);
   g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
   s.connect(f); f.connect(g); g.connect(musicGain);
   s.start(at); s.stop(at + dur + 0.02);
 }
-
 function scheduleStep(step, at) {
-  var bar = Math.floor(step / 8) % 4;
-  var ch = CHORDS[bar];
-  var s = step % 8;
-
-  if (s === 0 || s === 6) { musicNote("triangle", BASS[bar], at, 0.26, 0.22); }   // Bass
-  if (s === 0 || s === 4) { musicNoise(at, 0.05, 0.10, 60); }                     // Kick
-  if (s % 2 === 1)        { musicNoise(at, 0.025, 0.030, 7000); }                 // Hi-Hat
-
-  if (s % 2 === 0) {                                                              // Arpeggio
+  var bar = Math.floor(step / 8) % 4, ch = CHORDS[bar], s = step % 8;
+  if (s === 0 || s === 6) { musicNote("triangle", BASS[bar], at, 0.26, 0.22); }
+  if (s === 0 || s === 4) { musicNoise(at, 0.05, 0.10, 60); }
+  if (s % 2 === 1)        { musicNoise(at, 0.025, 0.030, 7000); }
+  if (s % 2 === 0) {
     var n = ch[(step / 2 + bar) % 3];
     var oct = (Math.floor(step / 2) % 4 === 3) ? 2 : 1;
     musicNote("square", n * oct, at, 0.16, 0.075);
   }
 }
-
 function musicTick() {
   if (!music.on || !audioReady) { return; }
   var stepDur = 60 / music.bpm / 4;
   while (music.next < AC.currentTime + 0.14) {
     if (music.next < AC.currentTime) { music.next = AC.currentTime + 0.02; }
     scheduleStep(music.step, music.next);
-    music.next += stepDur;
-    music.step++;
+    music.next += stepDur; music.step++;
   }
 }
-
 function musicStart() {
   if (!audioReady || !settings.music || music.on) { return; }
   music.on = true;
@@ -432,22 +535,14 @@ function musicStop() {
 }
 
 // ========================================================== Spielwerte =====
-var GRAV_UP    = 2350;
-var GRAV_DOWN  = 3500;
-var GRAV_FAST  = 7200;
-var JUMP_V     = -770;
-var JUMP_CUT   = 0.45;
+var GRAV_UP = 2350, GRAV_DOWN = 3500, GRAV_FAST = 7200;
+var JUMP_V = -770, JUMP_CUT = 0.45;
 var JUMP_CUT_MIN = -520;   // kuerzester Tipp erreicht 65 - raeumt jeden Bodengegner (max. 50)
+var COYOTE_TIME = 0.09, JUMP_BUFFER = 0.13;
+var SPEED_START = 330, SPEED_MAX = 960, SPEED_RAMP = 15;
+var RUNNER_X = 70;
 
-var COYOTE_TIME  = 0.09;
-var JUMP_BUFFER  = 0.13;
-
-var SPEED_START = 330;
-var SPEED_MAX   = 960;
-var SPEED_RAMP  = 15;
-var RUNNER_X    = 70;
-
-var screen = "menu";       // menu | settings | game | paused | over
+var screen = "menu";
 var state, runner, obstacles, clouds, pebbles, particles, stars;
 var lastTime = 0, night = 0, nightDir = 0, nextNightAt = 700;
 var scrollFar = 0, scrollNear = 0;
@@ -463,17 +558,14 @@ function buildStars() {
 
 function newGame(attract) {
   state = {
-    phase: "running",
-    attract: !!attract,
+    phase: "running", attract: !!attract,
     speed: SPEED_START, distance: 0, score: 0,
     high: readNum(HIGH_KEY), last: readNum(LAST_KEY),
     time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0
   };
   runner = {
-    y: 0, vy: 0, w: 44, h: 47,
-    ducking: false, onGround: true,
-    coyote: COYOTE_TIME, buffer: 0,
-    legT: 0, frame: 0, squash: 0, dustT: 0
+    y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
+    coyote: COYOTE_TIME, buffer: 0, legT: 0, frame: 0, squash: 0, dustT: 0
   };
   obstacles = []; particles = []; clouds = []; pebbles = [];
   for (var i = 0; i < 6; i++) {
@@ -529,34 +621,26 @@ function obstacleGap() {
 }
 
 // ====================================================== Vorfuehrmodus ======
-// Im Hauptmenue spielt sich das Spiel selbst, damit hinter dem Menue etwas
-// passiert.
-//
 // Zwei Dinge sind hier wichtiger, als es aussieht:
-//
-// 1. Ein Hindernis bleibt relevant, bis es die Figur GANZ passiert hat
-//    (o.x + o.w < RUNNER_X). Ein Abbruch nach der Vorderkante laesst die
-//    Figur sich mitten im 38 Einheiten breiten Vogel wieder aufrichten.
+// 1. Ein Hindernis bleibt relevant, bis es die Figur GANZ passiert hat. Ein
+//    Abbruch nach der Vorderkante liess die Figur sich mitten im 38 Einheiten
+//    breiten Vogel wieder aufrichten.
 // 2. Der Absprung haengt von Breite und Tempo ab, nicht von einem festen
-//    Abstand. Die Figur muss (Vorlauf + Hindernisbreite + eigene Breite)
-//    ueberstehen; bei einer Dreiergruppe reicht die Luftzeit sonst nicht.
-var AIR_TIME = 0.58;   // gemessene Dauer eines vollen Sprungs
-
+//    Abstand - bei Dreiergruppen reicht die Luftzeit sonst nicht.
+var AIR_TIME = 0.58;
 function autoPilot() {
   var want = "none";
   for (var i = 0; i < obstacles.length; i++) {
     var o = obstacles[i];
-    if (o.x + o.w < RUNNER_X) { continue; }             // ganz vorbei
+    if (o.x + o.w < RUNNER_X) { continue; }
     var tContact = (o.x - (RUNNER_X + 46)) / state.speed;
     var tPass    = (o.w + 50) / state.speed;
     var tTrigger = Math.max(0.05, (AIR_TIME - tPass) / 2);
-    if (tContact > tTrigger + 0.25) { continue; }       // noch zu weit weg
+    if (tContact > tTrigger + 0.25) { continue; }
     if (o.kind === "bird") {
-      if (o.y <= groundY - 70) { continue; }            // fliegt hoch genug
+      if (o.y <= groundY - 70) { continue; }
       want = (o.y <= groundY - 40) ? "duck" : "jump";
-    } else {
-      want = "jump";
-    }
+    } else { want = "jump"; }
     if (want === "jump" && tContact > tTrigger) { want = "wait"; }
     break;
   }
@@ -567,11 +651,8 @@ function autoPilot() {
 
 // ============================================================ Update =======
 function doJump(silent) {
-  runner.vy = JUMP_V;
-  runner.onGround = false;
-  runner.coyote = 0;
-  runner.buffer = 0;
-  runner.squash = -0.6;
+  runner.vy = JUMP_V; runner.onGround = false;
+  runner.coyote = 0; runner.buffer = 0; runner.squash = -0.6;
   dustPuff(RUNNER_X + 20, groundY, 6, 120);
   if (!silent) { SFX.jump(); }
 }
@@ -615,9 +696,7 @@ function update(dt) {
 
   if (runner.y >= 0) {
     var landing = !runner.onGround;
-    runner.y = 0;
-    runner.onGround = true;
-    runner.coyote = COYOTE_TIME;
+    runner.y = 0; runner.onGround = true; runner.coyote = COYOTE_TIME;
     if (landing) {
       var impact = Math.min(1, Math.abs(runner.vy) / 900);
       runner.squash = 0.35 + impact * 0.5;
@@ -695,19 +774,14 @@ function hits(o) {
 }
 
 function die() {
-  // Im Vorfuehrmodus stirbt der Autopilot lautlos und laeuft weiter.
   if (state.attract) {
-    obstacles.length = 0;
-    state.spawnIn = 220;
-    runner.ducking = false;
+    obstacles.length = 0; state.spawnIn = 220; runner.ducking = false;
     return;
   }
-  state.phase = "dead";
-  state.deadT = 0;
+  state.phase = "dead"; state.deadT = 0;
   if (settings.shake) { state.shake = 1; }
   deathBurst(RUNNER_X + 24, groundY - 26 + runner.y);
   SFX.die();
-
   var record = state.score > state.high;
   if (record) { state.high = state.score; writeNum(HIGH_KEY, state.high); }
   state.last = state.score;
@@ -716,17 +790,22 @@ function die() {
 }
 
 // =========================================================== Zeichnen ======
-function roundRect(x, y, w, h, r) {
+// G ist der aktuelle Zielkontext. So malen dieselben Formen ins Spielfeld
+// und in die kleine Vorschau der Garderobe - die Figur existiert nur einmal
+// im Code, damit Muetzen in beiden Ansichten gleich sitzen.
+var G = ctx;
+
+function rr(x, y, w, h, r) {
   if (w < 2 * r) { r = w / 2; }
   if (h < 2 * r) { r = h / 2; }
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y,     x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x,     y + h, r);
-  ctx.arcTo(x,     y + h, x,     y,     r);
-  ctx.arcTo(x,     y,     x + w, y,     r);
-  ctx.closePath();
-  ctx.fill();
+  G.beginPath();
+  G.moveTo(x + r, y);
+  G.arcTo(x + w, y,     x + w, y + h, r);
+  G.arcTo(x + w, y + h, x,     y + h, r);
+  G.arcTo(x,     y + h, x,     y,     r);
+  G.arcTo(x,     y,     x + w, y,     r);
+  G.closePath();
+  G.fill();
 }
 
 function drawSky() {
@@ -762,23 +841,21 @@ function drawDunes(scroll, baseY, amp, step, color) {
   ctx.fillStyle = color;
   ctx.beginPath();
   var x0 = -(((scroll % step) + step) % step);
-  ctx.moveTo(x0, groundY);
-  ctx.lineTo(x0, baseY);
+  ctx.moveTo(x0, groundY); ctx.lineTo(x0, baseY);
   for (var x = x0; x < LW + step; x += step) {
     var idx = Math.round((x + scroll) / step);
     var a = amp * (0.45 + 0.55 * Math.abs(Math.sin(idx * 2.399963)));
     ctx.quadraticCurveTo(x + step / 2, baseY - a, x + step, baseY);
   }
-  ctx.lineTo(LW + step, groundY);
-  ctx.closePath(); ctx.fill();
+  ctx.lineTo(LW + step, groundY); ctx.closePath(); ctx.fill();
 }
 function drawClouds() {
-  ctx.fillStyle = theme.soft;
+  G = ctx; ctx.fillStyle = theme.soft;
   for (var i = 0; i < clouds.length; i++) {
     var c = clouds[i];
     ctx.globalAlpha = (0.20 + c.s * 0.28) * (1 - night * 0.55);
-    roundRect(c.x, c.y, c.w, 11, 5.5);
-    roundRect(c.x + c.w * 0.22, c.y - 7, c.w * 0.55, 12, 6);
+    rr(c.x, c.y, c.w, 11, 5.5);
+    rr(c.x + c.w * 0.22, c.y - 7, c.w * 0.55, 12, 6);
   }
   ctx.globalAlpha = 1;
 }
@@ -805,93 +882,124 @@ function drawParticles() {
 
 var LEGS = [[13, 7], [10, 11], [7, 13], [10, 11]];
 
-function drawRunner() {
-  var dead = (state.phase === "dead");
-  var baseY = groundY + runner.y;
-  var sq = runner.squash;
+// Kopfbedeckung sitzt relativ zum Kopf, damit sie in beiden Posen passt.
+function paintHat(hx, hy, accent) {
+  if (look.hat === "none") { return; }
+  G.fillStyle = accent;
+  if (look.hat === "cap") {
+    rr(hx + 1, hy - 8, 20, 11, 5);
+    rr(hx + 16, hy - 2, 13, 4, 2);
+  } else if (look.hat === "top") {
+    rr(hx - 2, hy - 7, 26, 4, 2);
+    rr(hx + 4, hy - 20, 15, 14, 3);
+  } else if (look.hat === "band") {
+    rr(hx + 1, hy - 1, 21, 4.5, 2.2);
+  } else if (look.hat === "goggles") {
+    rr(hx + 1, hy + 2, 21, 4.5, 2.2);
+    G.beginPath(); G.arc(hx + 15, hy + 4.2, 4.6, 0, 6.2832); G.fill();
+  }
+}
+
+// Malt die Figur an eine beliebige Stelle eines beliebigen Kontextes.
+function paintRunner(g, baseX, baseY, o) {
+  G = g;
+  var ink = o.ink, sky = o.sky, accent = o.accent;
+  var sq = o.squash;
   var sy = 1 - sq * 0.30, sx = 1 + sq * 0.22;
-  if (!runner.onGround && !dead) {
-    var st = Math.min(0.16, Math.abs(runner.vy) / 5200);
+  if (!o.onGround && !o.dead) {
+    var st = Math.min(0.16, Math.abs(o.vy) / 5200);
     sy += st; sx -= st * 0.8;
   }
 
-  ctx.save();
-  ctx.translate(RUNNER_X + 22, baseY);
-  ctx.scale(sx, sy);
-  ctx.translate(-(RUNNER_X + 22), -baseY);
-  ctx.fillStyle = theme.ink;
+  g.save();
+  g.translate(baseX + 22, baseY);
+  g.scale(sx, sy);
+  g.translate(-(baseX + 22), -baseY);
+  g.fillStyle = ink;
 
-  if (runner.ducking && !dead) {
-    var w = 59, h = 30, x = RUNNER_X, y = baseY - h;
-    roundRect(x + 2, y + 6, w - 16, h - 6, 9);
-    roundRect(x + w - 22, y, 22, 19, 8);
-    roundRect(x + w - 5, y + 8, 8, 6, 3);
-    roundRect(x - 8, y + 9, 13, 6, 3);
-    ctx.fillStyle = theme.skyBot;
-    roundRect(x + w - 13, y + 5, 4.5, 4.5, 2.2);
-    ctx.fillStyle = theme.ink;
-    var lp = (runner.frame % 2 === 0) ? 0 : 8;
-    roundRect(x + 10 + lp, y + h - 2, 9, 6, 3);
-    roundRect(x + 28 - lp, y + h - 2, 9, 6, 3);
-    ctx.restore();
+  if (o.ducking && !o.dead) {
+    var w = 59, h = 30, x = baseX, y = baseY - h;
+    rr(x + 2, y + 6, w - 16, h - 6, 9);
+    rr(x + w - 22, y, 22, 19, 8);
+    rr(x + w - 5, y + 8, 8, 6, 3);
+    rr(x - 8, y + 9, 13, 6, 3);
+    g.fillStyle = sky;
+    rr(x + w - 13, y + 5, 4.5, 4.5, 2.2);
+    g.fillStyle = ink;
+    var lp = (o.frame % 2 === 0) ? 0 : 8;
+    rr(x + 10 + lp, y + h - 2, 9, 6, 3);
+    rr(x + 28 - lp, y + h - 2, 9, 6, 3);
+    paintHat(x + w - 22, y, accent);
+    g.restore();
+    G = ctx;
     return;
   }
 
-  var bw = 30, bh = 26, bx = RUNNER_X + 6, by = baseY - 34;
-  var tailUp = (runner.frame === 1 || runner.frame === 3) ? -2 : 0;
-  roundRect(bx - 13, by + 6 + tailUp, 16, 7, 3.5);
-  roundRect(bx, by, bw, bh, 10);
+  var bw = 30, bh = 26, bx = baseX + 6, by = baseY - 34;
+  var tailUp = (o.frame === 1 || o.frame === 3) ? -2 : 0;
+  rr(bx - 13, by + 6 + tailUp, 16, 7, 3.5);
+  rr(bx, by, bw, bh, 10);
 
   var hx = bx + bw - 8, hy = by - 16;
-  roundRect(hx, hy, 22, 20, 9);
-  roundRect(hx + 3, hy - 7 + tailUp * 0.5, 6, 10, 3);
-  roundRect(hx + 18, hy + 8, 9, 7, 3);
+  rr(hx, hy, 22, 20, 9);
+  rr(hx + 3, hy - 7 + tailUp * 0.5, 6, 10, 3);
+  rr(hx + 18, hy + 8, 9, 7, 3);
 
-  ctx.fillStyle = theme.skyBot;
-  if (dead) {
-    ctx.save();
-    ctx.strokeStyle = theme.skyBot; ctx.lineWidth = 2.4; ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(hx + 10, hy + 5); ctx.lineTo(hx + 16, hy + 11);
-    ctx.moveTo(hx + 16, hy + 5); ctx.lineTo(hx + 10, hy + 11);
-    ctx.stroke(); ctx.restore();
+  g.fillStyle = sky;
+  if (o.dead) {
+    g.save();
+    g.strokeStyle = sky; g.lineWidth = 2.4; g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(hx + 10, hy + 5); g.lineTo(hx + 16, hy + 11);
+    g.moveTo(hx + 16, hy + 5); g.lineTo(hx + 10, hy + 11);
+    g.stroke(); g.restore();
   } else {
-    roundRect(hx + 11, hy + 5, 5, 5, 2.5);
+    rr(hx + 11, hy + 5, 5, 5, 2.5);
   }
-  ctx.fillStyle = theme.ink;
+  g.fillStyle = ink;
 
-  if (!runner.onGround || dead) {
-    roundRect(bx + 4,  by + bh - 2, 9, 11, 4);
-    roundRect(bx + 17, by + bh - 2, 9, 8, 4);
+  if (!o.onGround || o.dead) {
+    rr(bx + 4,  by + bh - 2, 9, 11, 4);
+    rr(bx + 17, by + bh - 2, 9, 8, 4);
   } else {
-    var L = LEGS[runner.frame];
-    roundRect(bx + 3,  by + bh - 2, 9, L[0], 4);
-    roundRect(bx + 18, by + bh - 2, 9, L[1], 4);
+    var L = LEGS[o.frame];
+    rr(bx + 3,  by + bh - 2, 9, L[0], 4);
+    rr(bx + 18, by + bh - 2, 9, L[1], 4);
   }
-  ctx.restore();
+  paintHat(hx, hy, accent);
+  g.restore();
+  G = ctx;
+}
+
+function runnerOpts() {
+  return {
+    frame: runner.frame, ducking: runner.ducking, onGround: runner.onGround,
+    dead: state.phase === "dead", squash: runner.squash, vy: runner.vy,
+    ink: lookColor(), sky: theme.skyBot, accent: theme.accent
+  };
 }
 
 function drawCactus(o) {
-  ctx.fillStyle = theme.ground;
+  G = ctx; ctx.fillStyle = theme.ground;
   for (var i = 0; i < o.count; i++) {
     var x = o.x + i * (o.cw + o.gap);
     var h = o.ch - (i % 2 === 1 ? 6 : 0);
     var y = groundY - h;
-    roundRect(x, y, o.cw, h, o.cw / 2.4);
-    roundRect(x - 6, y + h * 0.32, 7, 5, 2.5);
-    roundRect(x - 6, y + h * 0.32, 5, h * 0.30, 2.5);
-    roundRect(x + o.cw - 1, y + h * 0.50, 7, 5, 2.5);
-    roundRect(x + o.cw + 1, y + h * 0.22, 5, h * 0.32, 2.5);
+    rr(x, y, o.cw, h, o.cw / 2.4);
+    rr(x - 6, y + h * 0.32, 7, 5, 2.5);
+    rr(x - 6, y + h * 0.32, 5, h * 0.30, 2.5);
+    rr(x + o.cw - 1, y + h * 0.50, 7, 5, 2.5);
+    rr(x + o.cw + 1, y + h * 0.22, 5, h * 0.32, 2.5);
   }
 }
 function drawBird(o) {
-  ctx.fillStyle = theme.ground;
+  G = ctx; ctx.fillStyle = theme.ground;
   var up = Math.floor(o.flap) % 2 === 0;
-  roundRect(o.x + 8, o.y + 10, 24, 9, 4.5);
-  roundRect(o.x + 28, o.y + 6, 11, 10, 4);
-  roundRect(o.x + 37, o.y + 10, 6, 4, 2);
-  if (up) { roundRect(o.x + 9, o.y - 3, 19, 9, 4.5); }
-  else    { roundRect(o.x + 9, o.y + 16, 19, 9, 4.5); }
+  rr(o.x + 8, o.y + 10, 24, 9, 4.5);
+  rr(o.x + 28, o.y + 6, 11, 10, 4);
+  rr(o.x + 37, o.y + 10, 6, 4, 2);
+  if (up) { rr(o.x + 9, o.y - 3, 19, 9, 4.5); }
+  else    { rr(o.x + 9, o.y + 16, 19, 9, 4.5); }
 }
 
 function pad5(n) {
@@ -931,9 +1039,28 @@ function render() {
     if (obstacles[i].kind === "bird") { drawBird(obstacles[i]); } else { drawCactus(obstacles[i]); }
   }
   drawParticles();
-  drawRunner();
+  paintRunner(ctx, RUNNER_X, groundY + runner.y, runnerOpts());
   ctx.setTransform(unit * dpr, 0, 0, unit * dpr, 0, 0);
   drawHud();
+}
+
+// --- Vorschau in der Garderobe ---
+var pvT = 0;
+function renderPreview(dt) {
+  pvT += dt * 7;
+  var s = 1.15;
+  pctx.setTransform(dpr * s, 0, 0, dpr * s, 0, 0);
+  pctx.clearRect(0, 0, 150 / s, 104 / s);
+
+  var gy = 78 / s;
+  pctx.strokeStyle = theme.soft; pctx.lineWidth = 1.6; pctx.globalAlpha = 0.45;
+  pctx.beginPath(); pctx.moveTo(8, gy + 1); pctx.lineTo(150 / s - 8, gy + 1); pctx.stroke();
+  pctx.globalAlpha = 1;
+
+  paintRunner(pctx, 30, gy, {
+    frame: Math.floor(pvT) % 4, ducking: false, onGround: true, dead: false,
+    squash: 0, vy: 0, ink: lookColor(), sky: theme.skyBot, accent: theme.accent
+  });
 }
 
 // ========================================================== Steuerung ======
@@ -949,8 +1076,7 @@ function endJump() {
 function setDuck(on) {
   if (screen !== "game" || state.phase !== "running") { return; }
   if (on && !runner.ducking && runner.onGround) {
-    dustPuff(RUNNER_X + 26, groundY, 4, 90);
-    SFX.duck();
+    dustPuff(RUNNER_X + 26, groundY, 4, 90); SFX.duck();
   }
   runner.ducking = on;
 }
@@ -959,14 +1085,11 @@ document.addEventListener("keydown", function (e) {
   if (e.repeat) { return; }
   if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
     e.preventDefault();
-    if (screen === "over") { startGame(); }
-    else if (screen === "menu") { startGame(); }
-    else { jump(); }
+    if (screen === "over" || screen === "menu") { startGame(); } else { jump(); }
   } else if (e.code === "ArrowDown" || e.code === "KeyS") {
     e.preventDefault(); setDuck(true);
   } else if (e.code === "Escape" || e.code === "KeyP") {
-    if (screen === "game") { pauseGame(); }
-    else if (screen === "paused") { resumeGame(); }
+    if (screen === "game") { pauseGame(); } else if (screen === "paused") { resumeGame(); }
   }
 });
 document.addEventListener("keyup", function (e) {
@@ -977,15 +1100,13 @@ document.addEventListener("keyup", function (e) {
 cv.addEventListener("touchstart", function (e) {
   if (screen !== "game") { return; }
   e.preventDefault();
-  var t = e.changedTouches[0];
-  if (t.clientY > H * 0.66) { setDuck(true); } else { jump(); }
+  if (e.changedTouches[0].clientY > H * 0.66) { setDuck(true); } else { jump(); }
 }, { passive: false });
 cv.addEventListener("touchend", function (e) {
   if (screen !== "game") { return; }
   e.preventDefault(); setDuck(false); endJump();
 }, { passive: false });
 cv.addEventListener("touchcancel", function () { setDuck(false); });
-
 cv.addEventListener("mousedown", function (e) {
   if (screen !== "game") { return; }
   e.preventDefault();
@@ -997,33 +1118,34 @@ cv.addEventListener("mouseup", function () {
 });
 
 // ============================================================ Screens ======
-var elMenu     = document.getElementById("menu");
-var elSettings = document.getElementById("settings");
-var elPaused   = document.getElementById("paused");
-var elOver     = document.getElementById("over");
-var elPause    = document.getElementById("pauseBtn");
+var elMenu = document.getElementById("menu");
+var elWard = document.getElementById("wardrobe");
+var elSet  = document.getElementById("settings");
+var elPaused = document.getElementById("paused");
+var elOver = document.getElementById("over");
+var elGear = document.getElementById("gearBtn");
+var elPause = document.getElementById("pauseBtn");
 var settingsFrom = "menu";
 
 function show(name) {
   screen = name;
-  elMenu.hidden     = (name !== "menu");
-  elSettings.hidden = (name !== "settings");
-  elPaused.hidden   = (name !== "paused");
-  elOver.hidden     = (name !== "over");
-  elPause.hidden    = (name !== "game");
+  elMenu.hidden   = (name !== "menu");
+  elWard.hidden   = (name !== "wardrobe");
+  elSet.hidden    = (name !== "settings");
+  elPaused.hidden = (name !== "paused");
+  elOver.hidden   = (name !== "over");
+  elGear.hidden   = (name !== "menu");
+  elPause.hidden  = (name !== "game");
 }
-
 function refreshMenu() {
   document.getElementById("mHigh").textContent = pad5(readNum(HIGH_KEY));
   document.getElementById("mLast").textContent = pad5(readNum(LAST_KEY));
 }
-
 function toMenu() {
-  newGame(true);              // Vorfuehrmodus laeuft hinter dem Menue
+  newGame(true);
   refreshMenu();
   show("menu");
 }
-
 function startGame() {
   audioInit();
   newGame(false);
@@ -1033,20 +1155,13 @@ function startGame() {
   try { history.pushState({ s: "game" }, ""); } catch (e) {}
   if (settings.music) { musicStart(); }
 }
-
 function pauseGame() {
   if (screen !== "game" || state.phase !== "running") { return; }
   document.getElementById("pScore").textContent = pad5(state.score);
   document.getElementById("pHigh").textContent = pad5(state.high);
-  show("paused");
-  SFX.ui();
+  show("paused"); SFX.ui();
 }
-function resumeGame() {
-  show("game");
-  lastTime = 0;               // Zeitsprung nach der Pause verschlucken
-  SFX.ui();
-}
-
+function resumeGame() { show("game"); lastTime = 0; SFX.ui(); }
 function showGameOver(record) {
   document.getElementById("oScore").textContent = pad5(state.score);
   document.getElementById("oHigh").textContent = pad5(state.high);
@@ -1054,24 +1169,63 @@ function showGameOver(record) {
   document.getElementById("overTag").innerHTML = record ? "Neuer persoenlicher Rekord" : "&nbsp;";
   setTimeout(function () { if (state.phase === "dead") { show("over"); } }, 420);
 }
-
-function openSettings(from) {
-  settingsFrom = from;
-  syncSwitches();
-  show("settings");
-  SFX.ui();
-}
+function openSettings(from) { settingsFrom = from; syncSwitches(); show("settings"); SFX.ui(); }
 function closeSettings() {
   SFX.ui();
   if (settingsFrom === "paused") { show("paused"); } else { toMenu(); }
 }
+function openWardrobe() { audioInit(); syncLook(); show("wardrobe"); SFX.ui(); }
+
+// --- Garderobe aufbauen ---
+var elSwatches = document.getElementById("swatches");
+var elHats = document.getElementById("hats");
+
+COLORS.forEach(function (c) {
+  var b = document.createElement("button");
+  b.className = "sw";
+  b.setAttribute("aria-pressed", "false");
+  b.setAttribute("aria-label", c.name);
+  b.title = c.name;
+  b.dataset.id = c.id;
+  if (c.hex) {
+    b.style.background = c.hex;
+  } else {
+    // "Standard" folgt dem Tag-Nacht-Thema, deshalb halb hell / halb dunkel
+    b.style.background = "linear-gradient(135deg, #343a40 0 50%, #e6e9ee 50% 100%)";
+  }
+  b.addEventListener("click", function () {
+    look.color = c.id; saveJson(LOOK_KEY, look); syncLook(); SFX.equip();
+  });
+  elSwatches.appendChild(b);
+});
+
+HATS.forEach(function (h) {
+  var b = document.createElement("button");
+  b.className = "hat";
+  b.setAttribute("aria-pressed", "false");
+  b.dataset.id = h.id;
+  b.textContent = h.name;
+  b.addEventListener("click", function () {
+    look.hat = h.id; saveJson(LOOK_KEY, look); syncLook(); SFX.equip();
+  });
+  elHats.appendChild(b);
+});
+
+function syncLook() {
+  var i, els = elSwatches.children;
+  for (i = 0; i < els.length; i++) {
+    els[i].setAttribute("aria-pressed", els[i].dataset.id === look.color ? "true" : "false");
+  }
+  els = elHats.children;
+  for (i = 0; i < els.length; i++) {
+    els[i].setAttribute("aria-pressed", els[i].dataset.id === look.hat ? "true" : "false");
+  }
+}
 
 // --- Schalter ---
 var SWITCHES = [
-  { id: "swMusic", key: "music" },
-  { id: "swSfx",   key: "sfx" },
-  { id: "swShake", key: "shake" },
-  { id: "swCycle", key: "cycle" }
+  { id: "swMusic", key: "music" }, { id: "swSfx", key: "sfx" },
+  { id: "swShake", key: "shake" }, { id: "swCycle", key: "cycle" }
 ];
 function syncSwitches() {
   for (var i = 0; i < SWITCHES.length; i++) {
@@ -1083,20 +1237,18 @@ SWITCHES.forEach(function (s) {
   document.getElementById(s.id).addEventListener("click", function () {
     audioInit();
     settings[s.key] = !settings[s.key];
-    saveSettings();
+    saveJson(SET_KEY, settings);
     syncSwitches();
-    if (s.key === "music") {
-      if (settings.music) { musicStart(); } else { musicStop(); }
-    }
-    if (s.key === "cycle" && !settings.cycle) {
-      night = 0; nightDir = 0; applyTheme(0);
-    }
+    if (s.key === "music") { if (settings.music) { musicStart(); } else { musicStop(); } }
+    if (s.key === "cycle" && !settings.cycle) { night = 0; nightDir = 0; applyTheme(0); }
     SFX.ui();
   });
 });
 
 document.getElementById("btnPlay").addEventListener("click", function () { SFX.ui(); startGame(); });
-document.getElementById("btnSettings").addEventListener("click", function () { audioInit(); openSettings("menu"); });
+document.getElementById("btnWardrobe").addEventListener("click", openWardrobe);
+document.getElementById("wBack").addEventListener("click", function () { SFX.ui(); toMenu(); });
+elGear.addEventListener("click", function () { audioInit(); openSettings("menu"); });
 document.getElementById("btnBack").addEventListener("click", closeSettings);
 document.getElementById("btnResume").addEventListener("click", resumeGame);
 document.getElementById("btnPauseSettings").addEventListener("click", function () { openSettings("paused"); });
@@ -1110,13 +1262,12 @@ document.getElementById("btnReset").addEventListener("click", function () {
 });
 elPause.addEventListener("click", pauseGame);
 
-// Android-Zurueck: MainActivity ruft goBack(), das loest popstate aus.
 window.addEventListener("popstate", function () {
   if (screen === "game" || screen === "paused" || screen === "over") { musicStop(); toMenu(); }
   else if (screen === "settings") { closeSettings(); }
+  else if (screen === "wardrobe") { toMenu(); }
 });
 
-// Erste Geste schaltet Audio frei (Autoplay-Sperre der Browser).
 function firstGesture() {
   audioInit();
   document.removeEventListener("pointerdown", firstGesture);
@@ -1127,11 +1278,9 @@ document.addEventListener("pointerdown", firstGesture);
 document.addEventListener("touchstart", firstGesture);
 document.addEventListener("keydown", firstGesture);
 
-// App im Hintergrund: Ton anhalten, sonst spielt die Musik weiter.
 document.addEventListener("visibilitychange", function () {
   if (!audioReady) { return; }
-  if (document.hidden) { AC.suspend(); }
-  else { AC.resume(); lastTime = 0; }
+  if (document.hidden) { AC.suspend(); } else { AC.resume(); lastTime = 0; }
 });
 
 // ============================================================== Loop =======
@@ -1140,13 +1289,14 @@ function frame(now) {
   var dt = (now - lastTime) / 1000;
   lastTime = now;
   if (dt > 0.05) { dt = 0.05; }
-  // Im Pausen- und Einstellungsbildschirm friert die Welt ein.
   if (screen !== "paused" && screen !== "settings") { update(dt); }
   render();
+  if (screen === "wardrobe") { renderPreview(dt); }
   requestAnimationFrame(frame);
 }
 
-loadSettings();
+loadJson(SET_KEY, settings);
+loadJson(LOOK_KEY, look);
 resize();
 toMenu();
 requestAnimationFrame(frame);

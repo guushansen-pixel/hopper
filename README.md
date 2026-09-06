@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.1" -VersionCode 2 -Force
+              -VersionName "1.2" -VersionCode 3 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -28,6 +28,7 @@ zusaetzlich als Web-Asset in die APK.
 |---|---|---|
 | Springen | tippen, laenger halten = hoeher | Leertaste / Pfeil hoch |
 | Ducken | unteres Drittel halten | Pfeil runter |
+| Pause | Knopf oben links | Esc oder P |
 
 ## Physik
 
@@ -63,8 +64,31 @@ deshalb an der ersten Beruehrung und an jedem Menueknopf.
 ## Menue
 
 Das Menue ist ein HTML-Overlay ueber dem Canvas, kein gezeichnetes UI:
-echte Touch-Ziele und kein Hit-Testing von Hand. Die Farben ziehen ueber
-CSS-Variablen beim Tag- und Nachtwechsel mit.
+echte Touch-Ziele und kein Hit-Testing von Hand.
+
+Die Oberflaeche wandert mit derselben Zahl (`night`) mit wie die Spielwelt.
+Wichtig dabei: **jeder** Wert wird interpoliert, Deckkraft eingeschlossen
+(`UI_DAY` / `UI_NIGHT` plus `mixRgba`). Eine frueher benutzte Schwelle
+(`t > 0.5 ? dunkel : hell`) liess Panel, Rahmen und Knoepfe mitten im
+1,8 Sekunden langen Uebergang hart umschlagen, waehrend der Hintergrund
+schon halb gewechselt war.
+
+`applyTheme` schreibt die CSS-Variablen nur bei einer Aenderung ueber
+0,02 - sonst laeuft waehrend des Uebergangs 60-mal je Sekunde ein
+Style-Recalc ueber das ganze Dokument.
+
+## Garderobe
+
+Acht Farben und fuenf Kopfbedeckungen, gesichert in `localStorage`. Die
+Farbe `auto` folgt dem Tag- und Nachtthema; die sieben festen Farben haben
+bewusst mittlere Helligkeit, damit sie auf hellem **und** dunklem Grund
+lesbar bleiben.
+
+Die Figur wird von genau einer Funktion gemalt (`paintRunner`), die ihren
+Zielkontext als Argument bekommt - einmal ins Spielfeld, einmal in die
+kleine Vorschau der Garderobe. Deshalb sitzen Muetzen in beiden Ansichten
+gleich. Die Zeichenhelfer nutzen dafuer die Variable `G` als aktuellen
+Kontext; wer eine neue Form ergaenzt, sollte `G` benutzen und nicht `ctx`.
 
 Dahinter laeuft das Spiel im Vorfuehrmodus weiter. Der Autopilot in
 `autoPilot()` hat zwei Eigenheiten, die nicht wegoptimiert werden sollten:
