@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.3" -VersionCode 4 -Force
+              -VersionName "1.4" -VersionCode 5 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -126,6 +126,35 @@ var hit = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
 Ein Test, der `openSettings()` direkt aufruft, laeuft an genau diesem
 Fehler vorbei.
 
-`.panel` setzt ausserdem `touch-action: pan-y`, weil `body` auf
-`touch-action: none` steht. Ohne die Ausnahme laesst sich ein Menue, das
-hoeher als der Bildschirm ist, auf dem Geraet nicht scrollen.
+## Scrollen in den Menues
+
+`touch-action` eines Elternelements **beschraenkt alle Nachkommen**. Solange
+`body` auf `touch-action: none` stand, liess sich ein Menue auch mit eigenem
+`pan-y` nicht scrollen - die Ausnahme im Kind hilft nicht gegen die Sperre im
+Eltern. Die Sperre gehoert deshalb auf `canvas#c`, nicht auf `body`:
+
+```css
+html, body { overscroll-behavior: none; }      /* kein Ueberziehen */
+canvas#c   { touch-action: none; }             /* Spielgesten abfangen */
+.panel     { touch-action: pan-y; overflow-y: auto; }
+```
+
+Am Desktop faellt das nicht auf, weil dort mit dem Mausrad gescrollt wird.
+
+## Was in den Einstellungen anhaelt
+
+Nur ein echtes Spiel wird eingefroren. In der Lobby laeuft der Vorfuehrmodus
+weiter, auch waehrend die Einstellungen offen sind - sonst steht die Szene
+dahinter ploetzlich still, was wie ein Absturz aussieht:
+
+```js
+var frozen = !state.attract && (screen === "paused" || screen === "settings");
+```
+
+## Dunkler Modus des Systems
+
+Die App faerbt sich selbst und laesst sich vom System nicht umfaerben; das
+Template von `apk-builder` schaltet dafuer "Force Dark" ab. Der Tag- und
+Nachtwechsel im Spiel ist davon unabhaengig. Wer stattdessen dem Systemmodus
+folgen will, kann `matchMedia("(prefers-color-scheme: dark)")` auswerten und
+`night` beim Start entsprechend setzen.

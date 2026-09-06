@@ -22,9 +22,12 @@
     color: var(--ink);
     -webkit-tap-highlight-color: transparent;
     -webkit-user-select: none; user-select: none;
-    touch-action: none; overscroll-behavior: none;
+    overscroll-behavior: none;
   }
-  canvas#c { display: block; width: 100%; height: 100%; }
+  /* touch-action gehoert auf die Spielflaeche, NICHT auf body: der Wert eines
+     Elternelements beschraenkt alle Nachkommen. Mit touch-action:none auf
+     body liess sich auch ein Menue mit eigenem pan-y nicht scrollen. */
+  canvas#c { display: block; width: 100%; height: 100%; touch-action: none; }
 
   .overlay {
     position: fixed; inset: 0;
@@ -1306,7 +1309,11 @@ function frame(now) {
   var dt = (now - lastTime) / 1000;
   lastTime = now;
   if (dt > 0.05) { dt = 0.05; }
-  if (screen !== "paused" && screen !== "settings") { update(dt); }
+  // Nur ein echtes Spiel wird angehalten. In der Lobby laeuft der
+  // Vorfuehrmodus weiter, auch waehrend die Einstellungen offen sind -
+  // sonst steht die Szene dahinter ploetzlich still.
+  var frozen = !state.attract && (screen === "paused" || screen === "settings");
+  if (!frozen) { update(dt); }
   render();
   if (screen === "wardrobe") { renderPreview(dt); }
   requestAnimationFrame(frame);
