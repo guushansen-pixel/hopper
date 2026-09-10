@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.6" -VersionCode 8 -Force
+              -VersionName "1.6" -VersionCode 9 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -206,3 +206,16 @@ der stehenden Pose Ohren zeichnete:
   Wert, der oben schon fuer Stauchen/Strecken benutzt wird - kein neuer
   Zustand, nur derselbe Wert an einer weiteren Stelle verwendet. Gilt auch
   fuer Ducken in der Luft (Schnellfall), das ist in diesem Spiel moeglich.
+
+## Katzen-Redesign
+
+Die erste Fassung der Katzenohren hatte Basis und Spitze vertauscht: das
+breite Ende zeigte nach oben, die Spitze nach unten zum Kopf - ein
+umgedrehtes Dreieck statt spitzer Ohren. `tri()` nimmt drei Punkte ohne
+eingebaute Vorstellung von "oben"/"unten", der Fehler fiel deshalb erst beim
+Hinsehen auf, nicht beim Pixel-Signatur-Test (der nur "zeichnet ohne Fehler"
+und "unterscheidet sich von den anderen Formen" pruefte, nicht "sieht richtig
+aus"). Jetzt liegt die breite Basis am Kopf, die Spitze zeigt weg davon.
+Der Schwanz bekam denselben Blick: die Kruemmung am Ende sitzt jetzt sichtbar
+versetzt ueber der Linie statt mittig draufgesetzt, damit sie wie eine
+Kruemmung aussieht statt wie eine Beule.

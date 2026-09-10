@@ -919,8 +919,10 @@ function tri(x1, y1, x2, y2, x3, y3) {
 // in beide Posen (stehend und geduckt).
 function drawEars(shape, hx, hy, tailUp) {
   if (shape === "cat") {
-    tri(hx + 1, hy - 7 + tailUp * 0.5, hx + 7,  hy - 7 + tailUp * 0.5, hx + 3,  hy - 1);
-    tri(hx + 7, hy - 7 + tailUp * 0.5, hx + 13, hy - 7 + tailUp * 0.5, hx + 10, hy - 1);
+    // Basis (breit) am Kopf, Spitze nach oben weg vom Kopf - die vorige
+    // Fassung hatte das vertauscht und sah wie ein umgedrehtes Dreieck aus.
+    tri(hx + 2, hy + 1 + tailUp * 0.5, hx + 8,  hy + 1 + tailUp * 0.5, hx + 5,  hy - 9 + tailUp * 0.5);
+    tri(hx + 12, hy + 1 + tailUp * 0.5, hx + 18, hy + 1 + tailUp * 0.5, hx + 15, hy - 9 + tailUp * 0.5);
   } else if (shape === "bunny") {
     rr(hx + 2, hy - 16 + tailUp * 0.5, 4.5, 16, 2.2);
     rr(hx + 8, hy - 16 + tailUp * 0.5, 4.5, 16, 2.2);
@@ -930,8 +932,11 @@ function drawEars(shape, hx, hy, tailUp) {
 }
 function drawTail(shape, bx, by, tailUp) {
   if (shape === "cat") {
-    rr(bx - 20, by + 4 + tailUp, 22, 6, 3);
-    G.beginPath(); G.arc(bx - 20, by + 7 + tailUp, 4.2, 0, 6.2832); G.fill();
+    // Schwanz laeuft schraeg nach oben aus statt gerade, mit einer echten
+    // Kruemmung am Ende (Kreis deutlich ueber der Linie, nicht mittig
+    // draufgesetzt - sonst wirkt es wie eine Beule statt einer Kruemmung).
+    rr(bx - 19, by + 1 + tailUp, 17, 5.5, 2.75);
+    G.beginPath(); G.arc(bx - 20, by - 4 + tailUp, 4, 0, 6.2832); G.fill();
   } else if (shape === "bunny") {
     G.beginPath(); G.arc(bx - 9, by + 9 + tailUp, 5.2, 0, 6.2832); G.fill();
   } else {
