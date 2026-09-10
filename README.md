@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.14" -VersionCode 17 -Force
+              -VersionName "1.15" -VersionCode 18 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -477,3 +477,31 @@ faelschlich `caveOn=true` liefern), und der `setTimeout(...,420)` in
 `showLevelComplete()` (identisch zu `showGameOver()`) kann in einem rein
 synchronen Testskript nicht feuern - erst mit echtem `await` im Test
 bestaetigt.
+
+## Einlauf-Sequenz statt hartem Schnitt bei Levelabschluss
+
+Bei Erreichen von `CAVE_START` (echtes Spiel, nicht Vorfuehrmodus) springt
+`completeLevel()` nicht mehr sofort auf den Levelabschluss-Bildschirm.
+Stattdessen ein neuer Uebergangszustand `state.entering`
+(`ENTER_DURATION` = 1,3s): eine dunkle Torbogen-Silhouette
+(`drawCaveArch`) scrollt normal mit der Welt heran, die Figur laeuft
+sichtbar weiter darauf zu, danach waechst eine schwarze Blende
+(`drawEnterWipe`) kubisch (`t*t*t`) ueber den Bildschirm - bleibt die
+ersten ~60% der Sequenz klein genug, um den Torbogen noch zu sehen, und
+deckt erst in den letzten Momenten den ganzen Bildschirm ab. Ein linearer
+erster Versuch (`t * 1.25`) war bei der Haelfte der Sequenz schon fast
+komplett schwarz und liess kaum Zeit, den Torbogen ueberhaupt
+wahrzunehmen - per Screenshot bei mehreren Zeitpunkten der Sequenz
+nachjustiert.
+
+`state.phase` bleibt waehrend der ganzen Sequenz `"running"` (Lauf-
+Animation und Weltscroll laufen normal weiter, fuer den Eindruck "die
+Figur laeuft tatsaechlich hinein"), nur `state.entering` sperrt Spawnen
+und Kollision ab - man kann waehrend der Sequenz garantiert nicht sterben,
+verifiziert mit einem absichtlich in die Kollisionszone gelegten
+Hindernis. Erst nach `ENTER_DURATION` ruft es `completeLevel()` wie
+zuvor auf.
+
+Vorfuehrmodus bleibt unveraendert beim sofortigen, unauffaelligen
+Uebergang (`caveOn = true` ohne Sequenz) - eine 1,3-Sekunden-Verdunklung
+mitten in der Lobby-Kulisse waere dort nur eine Ablenkung.

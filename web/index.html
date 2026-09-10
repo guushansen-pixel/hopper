@@ -593,7 +593,8 @@ var SFX = {
   point: function () { tone("square", 880, 880, 0.07, 0.22); setTimeout(function () { tone("square", 1320, 1320, 0.09, 0.20); }, 75); },
   die:   function () { tone("sawtooth", 420, 70, 0.55, 0.42); noise(0.35, 0.22, 420, 0.6); },
   ui:    function () { tone("square", 620, 620, 0.045, 0.16); },
-  equip: function () { tone("triangle", 520, 780, 0.09, 0.20); }
+  equip: function () { tone("triangle", 520, 780, 0.09, 0.20); },
+  enter: function () { tone("sine", 520, 130, 1.0, 0.30); }
 };
 
 // --------------------------------------------------------------- Musik ----
@@ -712,6 +713,16 @@ function nextMountainGap() {
 // bleibt sicher (Ground-Hindernisse bleiben ueberspringbar), ein voller
 // Sprung nicht mehr. CAVE_MAX_GAP liegt ueber 169, offene Abschnitte
 // schraenken also gar nichts ein.
+// Statt eines harten Schnitts bei CAVE_START: eine sichtbare Torbogen-
+// Silhouette scrollt heran, die Figur laeuft normal weiter darauf zu, dann
+// waechst eine schwarze Blende ueber das Bild - erst danach kommt
+// completeLevel() mit dem Levelabschluss-Bildschirm. Waehrenddessen bleibt
+// state.phase "running" (Lauf-Animation/Weltscroll laufen normal weiter),
+// nur state.entering gate't Spawnen und Kollision ab, damit man in dieser
+// garantiert sicheren Sequenz nicht sterben kann.
+var ENTER_DURATION = 1.3;
+var ENTER_ARCH_OFFSET = 460;
+
 var CAVE_START = 2000;
 var CAVE_MIN_GAP = 136, CAVE_MAX_GAP = 210, CAVE_WAVELEN = 3200;
 var scrollCeiling = 0;
@@ -767,7 +778,8 @@ function newGame(attract) {
     last: readNum(startInCave ? CAVE_LAST_KEY : LAST_KEY),
     time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0,
     mountainOn: false, mountainT: 0, mountainVis: 0,
-    caveOn: startInCave, caveVis: startInCave ? 1 : 0
+    caveOn: startInCave, caveVis: startInCave ? 1 : 0,
+    entering: false, enterT: 0, enterArchX: 0
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
@@ -950,13 +962,28 @@ function update(dt) {
       state.flash = 1.0;
       if (!state.attract) { SFX.point(); }
     }
-    // Level 1 (Wueste) endet hier, statt in Level 2 ueberzugehen - siehe
-    // completeLevel(). caveOn ist waehrend eines Wuestenlaufs immer false
-    // (wird nur beim Start eines Hoehlenlaufs gesetzt), die Pruefung greift
-    // also nur einmal, danach sorgt phase !== "running" fuer Ruhe.
-    if (!state.caveOn && state.score >= CAVE_START) {
-      completeLevel();
-      return;
+    // Level 1 (Wueste) endet hier - im echten Spiel nicht abrupt, sondern
+    // ueber die Einlauf-Sequenz (state.entering, siehe unten). caveOn ist
+    // waehrend eines Wuestenlaufs immer false, die Pruefung greift also nur
+    // einmal (danach ist entering bzw. caveOn wahr).
+    if (!state.caveOn && !state.entering && state.score >= CAVE_START) {
+      if (state.attract) {
+        state.caveOn = true;   // Vorfuehrmodus: weiterhin sofortiger, unauffaelliger Uebergang
+      } else {
+        state.entering = true;
+        state.enterT = 0;
+        state.enterArchX = RUNNER_X + ENTER_ARCH_OFFSET;
+        obstacles.length = 0;   // keine Gefahr waehrend der Sequenz
+        SFX.enter();
+      }
+    }
+    if (state.entering) {
+      state.enterT += dt;
+      if (state.enterT >= ENTER_DURATION) {
+        state.entering = false;
+        completeLevel();
+        return;
+      }
     }
 
     if (settings.cycle && state.score >= nextNightAt) {
@@ -1061,6 +1088,13 @@ function update(dt) {
       pebbles[i].x = LW + Math.random() * 40;
       pebbles[i].y = groundY + 5 + Math.random() * 18;
     }
+  }
+
+  if (state.entering) {
+    // Waehrend der Einlauf-Sequenz: kein Spawnen, keine Kollision - man
+    // kann hier garantiert nicht sterben. Der Torbogen scrollt normal mit.
+    state.enterArchX -= dx;
+    return;
   }
 
   state.spawnIn -= dx;
@@ -1483,6 +1517,38 @@ function drawCeiling() {
   ctx.fill();
   ctx.globalAlpha = 1;
 }
+// Torbogen, auf den die Figur waehrend der Einlauf-Sequenz zulaeuft - reine
+// Landmarke, keine Kollision (die Sequenz laesst wie in update() beschrieben
+// gar nichts toedlich werden). Scrollt normal mit state.enterArchX mit.
+function drawCaveArch(x) {
+  G = ctx;
+  ctx.fillStyle = "#14181f";
+  var w = 76, h = 130, r = w / 2;
+  ctx.beginPath();
+  ctx.moveTo(x, groundY);
+  ctx.lineTo(x, groundY - h + r);
+  ctx.arc(x + r, groundY - h + r, r, Math.PI, 0, false);
+  ctx.lineTo(x + w, groundY);
+  ctx.closePath();
+  ctx.fill();
+}
+// Waechst waehrend der Sequenz von der Figur aus zu einem bildschirmfuellenden
+// Schwarz - der eigentliche "man wird von der Dunkelheit verschluckt"-Effekt,
+// danach kommt der Levelabschluss-Bildschirm.
+function drawEnterWipe() {
+  if (!state.entering) { return; }
+  G = ctx;
+  var t = Math.min(1, state.enterT / ENTER_DURATION);
+  var cx = RUNNER_X + 20, cy = groundY - 24;
+  var maxR = Math.sqrt(LW * LW + LH * LH) * 1.05;
+  // Kubisch statt linear: bleibt die ersten ~60% der Sequenz klein (Zeit,
+  // den Torbogen zu sehen), waechst dann schnell auf volle Bildschirmgroesse.
+  var r = maxR * t * t * t;
+  ctx.fillStyle = "#000000";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, 6.2832);
+  ctx.fill();
+}
 function drawStalactite(o) {
   G = ctx; ctx.fillStyle = theme.ground;
   ctx.beginPath();
@@ -1542,6 +1608,7 @@ function render() {
                     // Kulisse darunter ab, sonst wuerden Wolken sichtbar
                     // durch massiven Fels hindurch schweben.
   drawGround();
+  if (state.entering) { drawCaveArch(state.enterArchX); }
   for (var i = 0; i < obstacles.length; i++) {
     var ob = obstacles[i];
     if (ob.kind === "bird") { drawBird(ob); }
@@ -1554,6 +1621,7 @@ function render() {
   paintRunner(ctx, RUNNER_X, groundY + runner.y, runnerOpts());
   ctx.setTransform(unit * dpr, 0, 0, unit * dpr, 0, 0);
   drawHud();
+  drawEnterWipe();
 }
 
 // --- Vorschau in der Garderobe ---
