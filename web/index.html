@@ -656,6 +656,13 @@ var RUNNER_X = 70;
 var screen = "menu";
 var state, runner, obstacles, clouds, pebbles, particles, stars;
 var lastTime = 0, night = 0, nightDir = 0, nextNightAt = 700;
+
+// Bergabschnitte sind selten und exklusiv: waehrend eines Abschnitts
+// spawnen NUR Felsen (dichter als sonst), ausserhalb ueberhaupt keine.
+// Die Bergkette ist nur waehrend eines Abschnitts sichtbar (state.mountainVis
+// blendet weich ein/aus statt hart umzuschalten).
+var MOUNTAIN_LEN = 12, MOUNTAIN_GAP_MIN = 500, MOUNTAIN_GAP_RAND = 400;
+var nextMountainAt = 260;
 var scrollFar = 0, scrollNear = 0, scrollPeaks = 0;
 
 // Felsen rollen zusaetzlich zum normalen Weltscroll - Extratempo waechst mit
@@ -677,7 +684,8 @@ function newGame(attract) {
     phase: "running", attract: !!attract,
     speed: SPEED_START, distance: 0, score: 0,
     high: readNum(HIGH_KEY), last: readNum(LAST_KEY),
-    time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0
+    time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0,
+    mountainOn: false, mountainT: 0, mountainVis: 0
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
@@ -693,6 +701,7 @@ function newGame(attract) {
   }
   scrollFar = 0; scrollNear = 0; scrollPeaks = 0;
   night = 0; nightDir = 0; nextNightAt = 700;
+  nextMountainAt = 260;
   applyTheme(0);
 }
 
@@ -718,30 +727,15 @@ function deathBurst(x, y) {
 
 // ======================================================== Hindernisse ======
 function spawnObstacle() {
+  if (state.mountainOn) { spawnRock(); return; }
   if (state.score > 320 && Math.random() < 0.24) {
     var hs = [groundY - 80, groundY - 54, groundY - 26];
     obstacles.push({ kind: "bird", x: LW + 20, y: hs[Math.floor(Math.random() * hs.length)],
                      w: 38, h: 26, flap: Math.random() * 6 });
     return;
   }
-  var r = Math.random();
-  if (r < 0.16) {
-    // Felsen: rund, rollt von den Bergen im Hintergrund herunter und wird
-    // waehrend der Fahrt schneller (siehe ROLL_ACCEL in update()). w und h
-    // sind gleich - die Kollisionsbox ist die Bounding-Box des Kreises.
-    // Bereich neu vermessen, diesmal mit dem realistischen Rollbonus (nicht
-    // 0), den ein Fels schon hat, wenn er die Naehe des Spielers erreicht -
-    // er startet an der echten Spawnkante, nicht direkt neben der Figur.
-    // Kuerzester Tipp raeumt bis Durchmesser 52, ab 56 trifft es. 34-46
-    // haelt sicheren Abstand. (Ein erster Testlauf ohne realistischen
-    // Rollbonus hatte faelschlich schon bei 56 "trifft" gemeldet.)
-    var rd = 34 + Math.random() * 12;
-    obstacles.push({ kind: "rock", x: LW + 20, y: groundY - rd, w: rd, h: rd,
-                     rollT: 0, rollExtra: 0, rot: Math.random() * 6.28 });
-    return;
-  }
-  if (r < 0.32) {
-    // Schlange: niedrig und breit statt hoch und schmal. Vermessen wie oben:
+  if (Math.random() < 0.20) {
+    // Schlange: niedrig und breit statt hoch und schmal. Vermessen:
     // sicher bis Breite 55, ab 58 trifft es. 42-52 haelt Abstand zur Grenze.
     var sw = 42 + Math.random() * 10;
     obstacles.push({ kind: "snake", x: LW + 20, y: groundY - 16, w: sw, h: 16 });
@@ -754,8 +748,30 @@ function spawnObstacle() {
                    w: count * cw + (count - 1) * gap, h: ch,
                    count: count, cw: cw, ch: ch, gap: gap });
 }
+
+// Felsen: rund, rollt herunter und wird waehrend der Fahrt schneller (siehe
+// ROLL_ACCEL in update()). w und h sind gleich - die Kollisionsbox ist die
+// Bounding-Box des Kreises. Groesse und Kollision sind wie zuvor vermessen
+// (mit dem realistischen Rollbonus, den ein Fels bei Spielernaehe schon hat,
+// nicht 0): kuerzester Tipp raeumt bis Durchmesser 52, ab 56 trifft es.
+// 26-48 nutzt die volle sichere Spanne fuer sichtbare Groessenvielfalt -
+// waehrend eines Bergabschnitts sind es ohnehin nur Felsen, es muss also
+// keine Ruecksicht auf andere Hindernisse in derselben Gruppe genommen
+// werden. drawRock() zeichnet drei Varianten (rund, kantig, rissig).
+function spawnRock() {
+  var rd = 26 + Math.random() * 22;
+  obstacles.push({ kind: "rock", x: LW + 20, y: groundY - rd, w: rd, h: rd,
+                   rollT: 0, rollExtra: 0, rot: Math.random() * 6.28,
+                   variant: Math.floor(Math.random() * 3) });
+}
+
 function obstacleGap() {
-  var base = state.speed * 0.60;
+  // "Viele Felsen" kommt ueber die Dauer des Abschnitts (MOUNTAIN_LEN),
+  // nicht ueber engen Abstand: 0.42 gab in 10 Minuten 37, 0.65 noch 11
+  // Abstuerze (fast alles Felsen) - zwei Felsen standen dann naeher als
+  // eine einzelne Sprungbahn Platz hat. Bei 0.70 nur noch 1 in 10 Minuten;
+  // ueber die 12s-Dauer kommen trotzdem bis zu 14 Felsen pro Abschnitt.
+  var base = state.speed * (state.mountainOn ? 0.70 : 0.60);
   return base + Math.random() * base * 0.80;
 }
 
@@ -772,8 +788,13 @@ function autoPilot() {
   for (var i = 0; i < obstacles.length; i++) {
     var o = obstacles[i];
     if (o.x + o.w < RUNNER_X) { continue; }
-    var tContact = (o.x - (RUNNER_X + 46)) / state.speed;
-    var tPass    = (o.w + 50) / state.speed;
+    // Felsen sind schneller unterwegs als state.speed allein (rollExtra) -
+    // ohne das hier einzurechnen, timt der Autopilot systematisch zu spaet
+    // und stolperte in dichten Felsabschnitten wiederholt (127 von 135
+    // Abstuerzen in 10 Minuten bei zu enger Taktung, siehe README).
+    var closingSpeed = state.speed + (o.kind === "rock" ? o.rollExtra : 0);
+    var tContact = (o.x - (RUNNER_X + 46)) / closingSpeed;
+    var tPass    = (o.w + 50) / closingSpeed;
     var tTrigger = Math.max(0.05, (AIR_TIME - tPass) / 2);
     if (tContact > tTrigger + 0.25) { continue; }
     if (o.kind === "bird") {
@@ -816,7 +837,24 @@ function update(dt) {
       nextNightAt += 700;
       nightDir = (night > 0.5) ? -1 : 1;
     }
+
+    if (!state.mountainOn && state.score >= nextMountainAt) {
+      state.mountainOn = true;
+      state.mountainT = MOUNTAIN_LEN;
+      state.spawnIn = Math.min(state.spawnIn, 16);   // baldiger erster Fels
+    }
+    if (state.mountainOn) {
+      state.mountainT -= dt;
+      if (state.mountainT <= 0) {
+        state.mountainOn = false;
+        nextMountainAt = state.score + MOUNTAIN_GAP_MIN + Math.random() * MOUNTAIN_GAP_RAND;
+        state.spawnIn = Math.max(state.spawnIn, 40);  // kein Felsen-Cactus-Genick-an-Genick
+      }
+    }
   }
+  // Weiche Ein-/Ausblendung der Bergkette, unabhaengig von "running" -
+  // sonst friert die Kulisse mitten im Uebergang ein, wenn die Figur stirbt.
+  state.mountainVis += ((state.mountainOn ? 1 : 0) - state.mountainVis) * Math.min(1, dt * 2.4);
   if (nightDir !== 0) {
     night += nightDir * dt * 0.55;
     if (night >= 1) { night = 1; nightDir = 0; }
@@ -1037,9 +1075,12 @@ function drawDunes(scroll, baseY, amp, step, color) {
 // (scrollPeaks), damit sie hinter den Duenen liegen und Tiefe erzeugen.
 // Wiederverwendete Duenenfarbe mit reduzierter Deckkraft statt einer
 // eigenen Palettenfarbe - spart Tag/Nacht-Pflege an zwei weiteren Stellen.
-function drawMountains(scroll, baseY, amp, step, color) {
+// vis (0..1) blendet weich ein/aus - die Bergkette ist nur waehrend eines
+// Bergabschnitts sichtbar, siehe state.mountainVis in update().
+function drawMountains(scroll, baseY, amp, step, color, vis) {
+  if (vis <= 0.01) { return; }
   ctx.fillStyle = color;
-  ctx.globalAlpha = 0.55;
+  ctx.globalAlpha = 0.55 * vis;
   ctx.beginPath();
   var x0 = -(((scroll % step) + step) % step);
   ctx.moveTo(x0, groundY); ctx.lineTo(x0, baseY);
@@ -1212,18 +1253,37 @@ function drawBird(o) {
   else    { rr(o.x + 9, o.y + 16, 19, 9, 4.5); }
 }
 
+// Drei Varianten fuer sichtbare Abwechslung waehrend eines Bergabschnitts:
+// 0 rund/glatt, 1 kantig, 2 rund mit Riss. Koerper UND Facetten liegen im
+// selben rotierten Koordinatensystem, damit auch die kantige Form beim
+// Rollen sichtbar mitdreht statt nur die Facette obendrauf.
 function drawRock(o) {
   G = ctx;
-  var r = o.w / 2, cx = o.x + r, cy = o.y + r;
-  ctx.fillStyle = theme.ground;
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.fill();
-  // Rotierende Facette macht das Rollen sichtbar - ein reiner Kreis stuende
-  // sonst optisch still, egal wie schnell er sich bewegt.
+  var r = o.w / 2, cx = o.x + r, cy = o.y + r, v = o.variant || 0;
   ctx.save();
   ctx.translate(cx, cy); ctx.rotate(o.rot);
+  ctx.fillStyle = theme.ground;
+  if (v === 1) {
+    var pts = [[1, -0.55], [0.85, 0.35], [0.15, 0.95], [-0.7, 0.75], [-0.95, -0.25], [-0.2, -0.95]];
+    ctx.beginPath();
+    for (var i = 0; i < pts.length; i++) {
+      var px = pts[i][0] * r, py = pts[i][1] * r;
+      if (i === 0) { ctx.moveTo(px, py); } else { ctx.lineTo(px, py); }
+    }
+    ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.2832); ctx.fill();
+  }
+  // Rotierende Facette macht das Rollen sichtbar - ein reiner Kreis stuende
+  // sonst optisch still, egal wie schnell er sich bewegt.
   ctx.globalAlpha = 0.5; ctx.fillStyle = theme.groundFill;
-  ctx.beginPath(); ctx.arc(r * 0.35, -r * 0.35, r * 0.30, 0, 6.2832); ctx.fill();
-  ctx.beginPath(); ctx.arc(-r * 0.30, r * 0.40, r * 0.20, 0, 6.2832); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.35, -r * 0.35, r * 0.28, 0, 6.2832); ctx.fill();
+  if (v === 2) {
+    ctx.globalAlpha = 0.35; ctx.strokeStyle = theme.groundFill; ctx.lineWidth = Math.max(1, r * 0.12);
+    ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.1); ctx.lineTo(r * 0.5, r * 0.3); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.arc(-r * 0.30, r * 0.40, r * 0.20, 0, 6.2832); ctx.fill();
+  }
   ctx.globalAlpha = 1;
   ctx.restore();
 }
@@ -1269,7 +1329,7 @@ function render() {
     var m = state.shake * state.shake * 7;
     ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
   }
-  drawMountains(scrollPeaks, groundY - 40, 92, 260, theme.duneFar);
+  drawMountains(scrollPeaks, groundY - 40, 92, 260, theme.duneFar, state.mountainVis);
   drawDunes(scrollFar,  groundY - 26, 34, 190, theme.duneFar);
   drawDunes(scrollNear, groundY - 8,  22, 130, theme.duneNear);
   drawClouds();

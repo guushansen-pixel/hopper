@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.8" -VersionCode 11 -Force
+              -VersionName "1.9" -VersionCode 12 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -278,3 +278,44 @@ bis zur Naehe des Spielers bereits Bonus-Tempo aufgebaut hat und dadurch
 zufaellig fast exakt im Sprungscheitel ankommt (per Trajektorien-Log
 bestaetigt: Kollisionszone und Sprunghoehepunkt trafen bei t~0.22s
 zusammen), nicht spaeter und ungeschuetzter wie beim Start-bei-0-Test.
+
+## Bergabschnitte: selten, dann exklusiv Felsen
+
+Vorher waren die Berge Dauerkulisse und Felsen einer von vier moeglichen
+Hindernissen (16%). Jetzt sind Bergabschnitte ein seltenes Ereignis
+(`state.mountainOn`, geplant per Score-Schwelle wie der Tag/Nachtwechsel,
+Abstand 500-900 Punkte): waehrend eines Abschnitts spawnen **ausschliesslich**
+Felsen, in drei Varianten (rund/glatt, kantig, rissig) und breiterer
+Groessenstreuung (26-48 statt vorher 34-46). Ausserhalb eines Abschnitts
+spawnt gar kein Felsen mehr. Die Bergkette blendet weich mit dem Abschnitt
+ein/aus (`state.mountainVis`, unabhaengig von `running` aktualisiert, damit
+sie nicht mitten im Uebergang einfriert, wenn die Figur waehrenddessen
+stirbt).
+
+**"Viele Felsen" kommt ueber die Dauer des Abschnitts (12s), nicht ueber
+gefaehrlich engen Abstand.** Der erste Versuch (halber Normalabstand)
+erzeugte in 10 Minuten 135 Autopilot-Abstuerze - zwei Felsen standen dann
+teils naeher, als eine einzelne Sprungbahn Platz hat. Gesweept bis ein
+sicherer Wert gefunden war: 0.70x Normalabstand (statt 0.60x ausserhalb)
+haelt sich bei etwa 1 Absturz pro 10 Minuten, ueber die 12 Sekunden Dauer
+kommen trotzdem bis zu 14 Felsen in einem Abschnitt zusammen.
+
+Ein zweiter, unabhaengiger Fund dabei: `autoPilot()` berechnete Sprung-
+Zeitpunkte bisher nur aus `state.speed`, ohne den Rollbonus eines Felsens
+(`o.rollExtra`) einzurechnen. Bei einzelnen Felsen zwischen anderen
+Hindernissen fiel das kaum auf; sobald **jedes** Hindernis in Folge ein
+beschleunigender Fels war, summierte sich der systematische Timing-Fehler
+zu wiederholten Abstuerzen. Behoben, indem die Trigger-Formel die
+tatsaechliche Schliessgeschwindigkeit (`state.speed + rollExtra`) benutzt
+statt nur `state.speed`.
+
+**Ehrlich bleibt ein kleiner Rest:** Auch mit beiden Korrekturen zeigt ein
+20-Minuten-Autopilotlauf noch vereinzelte Abstuerze (rund 1 pro 7
+Abschnitte, ausschliesslich an Felsen) - vermutlich Restfaelle, in denen
+der Autopilot (der immer nur das naechstgelegene Hindernis betrachtet,
+siehe autoPilot()-Kommentar) durch Zufallsstreuung in der Taktung doch
+zwei zu nah stehende Felsen erwischt. Das betrifft nur die Vorfuehrmodus-
+Kulisse im Menue, nicht echte Spielsicherheit - die Kollisionsgrenze pro
+Fels ist unabhaengig davon direkt vermessen (siehe oben). Weiter zu
+verbessern waere ein zweites Hindernis in die Trigger-Berechnung
+einzubeziehen statt nur das naechste; aktuell nicht umgesetzt.
