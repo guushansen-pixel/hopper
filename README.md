@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.7" -VersionCode 10 -Force
+              -VersionName "1.8" -VersionCode 11 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -247,3 +247,34 @@ mehrfach `update(1/60)`, kein `x` pro Frame neu setzen), nicht die
 Sprung-Scheitelhoehe mit der Hindernishoehe vergleichen. Ein erster Versuch
 dazu hat genau diesen Fehler gemacht und faelschlich "trifft" gemeldet, wo
 tatsaechlich "raeumt" galt.
+
+## Rollender Fels und Bergkette
+
+Der Fels ist jetzt ein Kreis (Bounding-Box weiterhin die Kollisionsbox) mit
+zwei halbtransparenten Facetten, die sich mit ihm drehen (`o.rot`, aus
+zurueckgelegter Strecke berechnet: `rot += bewegung / radius` - ein reiner
+Kreis ohne Facette stuende beim Rollen optisch still).
+
+Zusaetzlich zum normalen Weltscroll bekommt jeder Fels ein eigenes, mit der
+Rollzeit wachsendes Extratempo (`ROLL_ACCEL`, gedeckelt durch
+`MAX_ROLL_BONUS`) - er wird schneller, je laenger er unterwegs ist. Die
+Bergkette (`drawMountains`) ist eine eigene, noch langsamere Parallaxe
+(`scrollPeaks`) hinter den Duenen, mit spitzeren Gipfeln statt der weichen
+Duenenkurve. Sie ist reine Kulisse - der Fels spawnt weiterhin am normalen
+Hindernis-Spawnpunkt, es gibt keine animierte Bahn von einem Berggipfel
+herunter in die Spur.
+
+**Der Rollbonus veraendert die sichere Kollisionsgrenze**, deshalb war die
+alte Vermessung (Blockform, keine Beschleunigung) hinfaellig und musste neu
+gemacht werden - diesmal mit dem *realistischen* Rollbonus, den ein Fels
+schon hat, wenn er in Spielernaehe ankommt (er startet an der echten
+Spawnkante, nicht direkt neben der Figur). Kuerzester Tipp raeumt bis
+Durchmesser 52, ab 56 trifft es; Spawn-Bereich 34-46 haelt Abstand.
+
+Ein erster Messversuch ohne realistischen Rollbonus (rollT=0 direkt neben
+der Figur) meldete faelschlich schon "trifft" bei Werten, die in der
+echten Anfahrt sicher waren - weil ein Fels, der schon eine Weile rollt,
+bis zur Naehe des Spielers bereits Bonus-Tempo aufgebaut hat und dadurch
+zufaellig fast exakt im Sprungscheitel ankommt (per Trajektorien-Log
+bestaetigt: Kollisionszone und Sprunghoehepunkt trafen bei t~0.22s
+zusammen), nicht spaeter und ungeschuetzter wie beim Start-bei-0-Test.
