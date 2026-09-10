@@ -269,6 +269,8 @@
       <h2>Garderobe</h2>
     </div>
     <canvas id="pv"></canvas>
+    <div class="grpLabel">Form</div>
+    <div class="hats" id="shapes"></div>
     <div class="grpLabel">Farbe</div>
     <div class="swatches" id="swatches"></div>
     <div class="grpLabel">Kopf</div>
@@ -461,7 +463,15 @@ var HIGH_KEY = "hopper.highscore";
 var LAST_KEY = "hopper.last";
 
 var settings = { music: true, sfx: true, shake: true, cycle: true };
-var look = { color: "auto", hat: "none" };
+var look = { color: "auto", hat: "none", shape: "dog" };
+
+// Drei Silhouetten statt nur einer - Ohren und Schwanz unterscheiden sich,
+// Rumpf/Beine/Laufzyklus bleiben geteilt (siehe drawEars/drawTail).
+var SHAPES = [
+  { id: "dog",   name: "Hund" },
+  { id: "cat",   name: "Katze" },
+  { id: "bunny", name: "Hase" }
+];
 
 // Farben, die sowohl auf hellem als auch auf dunklem Grund lesbar bleiben -
 // deshalb durchweg mittlere Helligkeit, keine sehr hellen oder dunklen Toene.
@@ -896,6 +906,39 @@ function die() {
 // im Code, damit Muetzen in beiden Ansichten gleich sitzen.
 var G = ctx;
 
+function tri(x1, y1, x2, y2, x3, y3) {
+  G.beginPath();
+  G.moveTo(x1, y1); G.lineTo(x2, y2); G.lineTo(x3, y3);
+  G.closePath();
+  G.fill();
+}
+
+// Ohren und Schwanz je Charakterform. hx/hy bzw. bx/by sind dieselben
+// Referenzpunkte, die der Hund schon immer benutzt hat (Kopf- bzw.
+// Ruecken-Ecke) - dadurch passen alle drei Formen ohne weitere Anpassung
+// in beide Posen (stehend und geduckt).
+function drawEars(shape, hx, hy, tailUp) {
+  if (shape === "cat") {
+    tri(hx + 1, hy - 7 + tailUp * 0.5, hx + 7,  hy - 7 + tailUp * 0.5, hx + 3,  hy - 1);
+    tri(hx + 7, hy - 7 + tailUp * 0.5, hx + 13, hy - 7 + tailUp * 0.5, hx + 10, hy - 1);
+  } else if (shape === "bunny") {
+    rr(hx + 2, hy - 16 + tailUp * 0.5, 4.5, 16, 2.2);
+    rr(hx + 8, hy - 16 + tailUp * 0.5, 4.5, 16, 2.2);
+  } else {
+    rr(hx + 3, hy - 7 + tailUp * 0.5, 6, 10, 3);
+  }
+}
+function drawTail(shape, bx, by, tailUp) {
+  if (shape === "cat") {
+    rr(bx - 20, by + 4 + tailUp, 22, 6, 3);
+    G.beginPath(); G.arc(bx - 20, by + 7 + tailUp, 4.2, 0, 6.2832); G.fill();
+  } else if (shape === "bunny") {
+    G.beginPath(); G.arc(bx - 9, by + 9 + tailUp, 5.2, 0, 6.2832); G.fill();
+  } else {
+    rr(bx - 13, by + 6 + tailUp, 16, 7, 3.5);
+  }
+}
+
 function rr(x, y, w, h, r) {
   if (w < 2 * r) { r = w / 2; }
   if (h < 2 * r) { r = h / 2; }
@@ -1020,10 +1063,16 @@ function paintRunner(g, baseX, baseY, o) {
 
   if (o.ducking && !o.dead) {
     var w = 59, h = 30, x = baseX, y = baseY - h;
+    // Ohren/Schwanz reagieren auf die Faellgeschwindigkeit (o.vy), genau wie
+    // Stauchen/Strecken oben schon auf vy reagiert - kein neuer Zustand,
+    // nur derselbe Wert an einer weiteren Stelle benutzt. Ducken ist auch
+    // in der Luft moeglich (Schnellfall), daher gilt das auch hier.
+    var duckLag = o.onGround ? 0 : Math.max(-3, Math.min(3, o.vy / 260));
     rr(x + 2, y + 6, w - 16, h - 6, 9);
     rr(x + w - 22, y, 22, 19, 8);
+    drawEars(o.shape, x + w - 22, y, duckLag);
     rr(x + w - 5, y + 8, 8, 6, 3);
-    rr(x - 8, y + 9, 13, 6, 3);
+    drawTail(o.shape, x + 5, y + 3, duckLag);
     g.fillStyle = sky;
     rr(x + w - 13, y + 5, 4.5, 4.5, 2.2);
     g.fillStyle = ink;
@@ -1038,12 +1087,13 @@ function paintRunner(g, baseX, baseY, o) {
 
   var bw = 30, bh = 26, bx = baseX + 6, by = baseY - 34;
   var tailUp = (o.frame === 1 || o.frame === 3) ? -2 : 0;
-  rr(bx - 13, by + 6 + tailUp, 16, 7, 3.5);
+  var vyLag = o.onGround ? 0 : Math.max(-3, Math.min(3, o.vy / 260));
+  drawTail(o.shape, bx, by, tailUp + vyLag);
   rr(bx, by, bw, bh, 10);
 
   var hx = bx + bw - 8, hy = by - 16;
   rr(hx, hy, 22, 20, 9);
-  rr(hx + 3, hy - 7 + tailUp * 0.5, 6, 10, 3);
+  drawEars(o.shape, hx, hy, tailUp + vyLag);
   rr(hx + 18, hy + 8, 9, 7, 3);
 
   g.fillStyle = sky;
@@ -1076,7 +1126,7 @@ function runnerOpts() {
   return {
     frame: runner.frame, ducking: runner.ducking, onGround: runner.onGround,
     dead: state.phase === "dead", squash: runner.squash, vy: runner.vy,
-    ink: lookColor(), sky: theme.skyBot, accent: theme.accent
+    ink: lookColor(), sky: theme.skyBot, accent: theme.accent, shape: look.shape
   };
 }
 
@@ -1160,7 +1210,8 @@ function renderPreview(dt) {
 
   paintRunner(pctx, 30, gy, {
     frame: Math.floor(pvT) % 4, ducking: false, onGround: true, dead: false,
-    squash: 0, vy: 0, ink: lookColor(), sky: theme.skyBot, accent: theme.accent
+    squash: 0, vy: 0, ink: lookColor(), sky: theme.skyBot, accent: theme.accent,
+    shape: look.shape
   });
 }
 
@@ -1280,6 +1331,20 @@ function openWardrobe() { audioInit(); syncLook(); show("wardrobe"); SFX.ui(); }
 // --- Garderobe aufbauen ---
 var elSwatches = document.getElementById("swatches");
 var elHats = document.getElementById("hats");
+var elShapes = document.getElementById("shapes");
+elShapes.style.gridTemplateColumns = "repeat(3, 1fr)";   // 3 statt 5 Kacheln
+
+SHAPES.forEach(function (s) {
+  var b = document.createElement("button");
+  b.className = "hat";
+  b.setAttribute("aria-pressed", "false");
+  b.dataset.id = s.id;
+  b.textContent = s.name;
+  b.addEventListener("click", function () {
+    look.shape = s.id; saveJson(LOOK_KEY, look); syncLook(); SFX.equip();
+  });
+  elShapes.appendChild(b);
+});
 
 COLORS.forEach(function (c) {
   var b = document.createElement("button");
@@ -1320,6 +1385,10 @@ function syncLook() {
   els = elHats.children;
   for (i = 0; i < els.length; i++) {
     els[i].setAttribute("aria-pressed", els[i].dataset.id === look.hat ? "true" : "false");
+  }
+  els = elShapes.children;
+  for (i = 0; i < els.length; i++) {
+    els[i].setAttribute("aria-pressed", els[i].dataset.id === look.shape ? "true" : "false");
   }
 }
 

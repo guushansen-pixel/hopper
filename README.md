@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.5" -VersionCode 6 -Force
+              -VersionName "1.6" -VersionCode 8 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -184,3 +184,25 @@ zusaetzlich zu den bisherigen Werten. Nachkontrast damit rechnerisch ~7,9:1.
 `@supports not (backdrop-filter: blur(1px))` faellt auf einen blickdichten
 `--solidPanel` zurueck, der ebenfalls Tag/Nacht folgt - sonst waere der Text
 in Browsern ohne Blur-Unterstuetzung bei Nacht unlesbar auf hellem Grund.
+
+## Drei Lauffiguren
+
+`look.shape` (`dog` / `cat` / `bunny`) waehlt eine von drei Silhouetten in
+der Garderobe. Rumpf, Beine und Laufzyklus bleiben fuer alle drei identisch
+(`LEGS`-Array, Koerper-Rechtecke) - nur Ohren und Schwanz unterscheiden sich,
+gezeichnet von zwei eigenstaendigen Funktionen `drawEars`/`drawTail`, die
+denselben Kopf- bzw. Ruecken-Referenzpunkt bekommen, den der Hund schon immer
+benutzt hat. Dadurch passt jede Form ohne Sonderfaelle in beide Posen.
+
+Zwei Luecken kamen als Feedback zurueck, nachdem die erste Fassung nur in
+der stehenden Pose Ohren zeichnete:
+
+- **Ohren fehlten komplett, sobald geduckt wurde** - das war schon beim
+  urspruenglichen (einzigen) Hund so, nicht neu durch die drei Formen. Die
+  Duck-Pose zeichnet jetzt fuer alle drei Formen auch Ohren.
+- **Ohren/Schwanz reagierten auf nichts** - sie hatten nur den Zwei-Pixel-
+  Bob aus dem Laufzyklus. Jetzt tragen sie zusaetzlich einen kleinen Ausschlag
+  proportional zu `o.vy` (`Math.max(-3, Math.min(3, o.vy / 260))`), demselben
+  Wert, der oben schon fuer Stauchen/Strecken benutzt wird - kein neuer
+  Zustand, nur derselbe Wert an einer weiteren Stelle verwendet. Gilt auch
+  fuer Ducken in der Luft (Schnellfall), das ist in diesem Spiel moeglich.
