@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.10" -VersionCode 13 -Force
+              -VersionName "1.11" -VersionCode 14 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -338,3 +338,24 @@ bei Score 0 ausschliesslich Kaktus, Vogelanteil in der Rampenmitte nahe
 der halben Zielquote, Schlange bleibt vor `SNAKE_START` bei 0, beide
 Anteile erreichen spaeter ihre Zielquote, Vogelanteil waechst monoton
 mit dem Score.
+
+## Bergabschnitte seltener + Abstand waechst mit dem Tempo
+
+Erster Abschnitt jetzt erst bei Score 700-900 statt 260. Wichtiger als der
+Start: der Punkte-Abstand zwischen Abschnitten ist nicht mehr fest
+(500-900), sondern skaliert mit `state.speed / SPEED_START` und zusaetzlich
+mit einem von `state.score` abhaengigen Wachstumsfaktor (`nextMountainGap()`).
+
+Der Grund ist nicht nur Geschmack: Score waechst proportional zum Tempo
+(`score = distance/14`, `distance += speed*dt`), und das Tempo steigt uebers
+Spiel von 330 auf 960. Ein **fester** Punkte-Abstand haette also spaeter im
+Spiel, wo pro Sekunde mehr Punkte anfallen, einen **kuerzeren** Realzeit-
+Abstand ergeben - Bergabschnitte waeren dann gegen Ende fast durchgehend
+gekommen, ohne dass sich am Punkte-Abstand selbst etwas geaendert haette.
+Der `speedFactor` gleicht das aus, `growth` macht den Realzeit-Abstand
+zusaetzlich noch groesser statt nur konstant zu halten.
+
+Gemessen statt angenommen: 28 Minuten Autopilot-Soak, Realzeit-Abstand
+zwischen 22 aufgezeichneten Abschnitten protokolliert. Ergebnis 47.7s bis
+94.7s, im Schnitt von ~74s (fruehe Haelfte) auf ~78s (spaete Haelfte)
+wachsend - keine Verkuerzung, kein "nur noch Berge" am Ende.

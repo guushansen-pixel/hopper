@@ -662,7 +662,21 @@ var lastTime = 0, night = 0, nightDir = 0, nextNightAt = 700;
 // Die Bergkette ist nur waehrend eines Abschnitts sichtbar (state.mountainVis
 // blendet weich ein/aus statt hart umzuschalten).
 var MOUNTAIN_LEN = 12, MOUNTAIN_GAP_MIN = 500, MOUNTAIN_GAP_RAND = 400;
-var nextMountainAt = 260;
+var nextMountainAt = 700 + Math.random() * 200;
+
+// Der Punkte-Abstand zwischen Abschnitten muss mit dem Tempo mitwachsen,
+// sonst kommen sie in echter Zeit immer schneller hintereinander: das
+// Tempo (und damit der Punktezuwachs pro Sekunde) steigt uebers Spiel,
+// ein fester Punkte-Abstand wuerde also spaeter im Spiel real seltener
+// Zeit zwischen Abschnitten lassen - am Ende waeren es "nur noch Berge".
+// speedFactor gleicht das aus, growth macht den Abstand in echter Zeit
+// zusaetzlich noch groesser statt nur gleich zu bleiben.
+function nextMountainGap() {
+  var speedFactor = state.speed / SPEED_START;
+  var growth = 1 + Math.min(1.2, state.score / 2500);
+  var base = MOUNTAIN_GAP_MIN + Math.random() * MOUNTAIN_GAP_RAND;
+  return base * speedFactor * growth;
+}
 
 // Schwierigkeit steigt schrittweise: am Anfang nur Kaktus, dann kommen
 // Voegel langsam dazu, danach Schlangen. "Langsam" heisst hier woertlich
@@ -715,7 +729,7 @@ function newGame(attract) {
   }
   scrollFar = 0; scrollNear = 0; scrollPeaks = 0;
   night = 0; nightDir = 0; nextNightAt = 700;
-  nextMountainAt = 260;
+  nextMountainAt = 700 + Math.random() * 200;
   applyTheme(0);
 }
 
@@ -861,7 +875,7 @@ function update(dt) {
       state.mountainT -= dt;
       if (state.mountainT <= 0) {
         state.mountainOn = false;
-        nextMountainAt = state.score + MOUNTAIN_GAP_MIN + Math.random() * MOUNTAIN_GAP_RAND;
+        nextMountainAt = state.score + nextMountainGap();
         state.spawnIn = Math.max(state.spawnIn, 40);  // kein Felsen-Cactus-Genick-an-Genick
       }
     }
