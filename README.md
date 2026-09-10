@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.11" -VersionCode 14 -Force
+              -VersionName "1.12" -VersionCode 15 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -359,3 +359,55 @@ Gemessen statt angenommen: 28 Minuten Autopilot-Soak, Realzeit-Abstand
 zwischen 22 aufgezeichneten Abschnitten protokolliert. Ergebnis 47.7s bis
 94.7s, im Schnitt von ~74s (fruehe Haelfte) auf ~78s (spaete Haelfte)
 wachsend - keine Verkuerzung, kein "nur noch Berge" am Ende.
+
+## Zweite Stufe: die Hoehle (ab Score 2000, dauerhaft)
+
+Anders als die Bergabschnitte kein wiederkehrendes Ereignis, sondern ein
+dauerhafter Zustandswechsel (`state.caveOn`), der ab `CAVE_START` (2000)
+einmal umschaltet und nie zurueck. Eine Deckenflaeche (`ceilingGapAt()`,
+eine durchgehende Sinuswelle statt Segmenten wie die Duenen) schraenkt die
+Sprunghoehe streckenweise ein; Stalaktiten haengen als eigener
+Hindernis-Typ mit echter Kollision zusaetzlich herab. Ab Score 2000 werden
+keine neuen Bergabschnitte mehr angesetzt (rollende Felsen von fernen
+Gipfeln passen nicht mehr ins Bild einer Hoehle) - ein bereits laufender
+Abschnitt endet aber ganz normal.
+
+**Die Grenzwerte sind aus der Kollisionsgeometrie abgeleitet, nicht
+geraten.** `hits()` misst die Kopfhoehe eines Sprungs nicht an `runner.y`
+allein, sondern an `rh - runner.y` (rh = Koerperhoehe: 47 stehend, 30
+geduckt) - ein erster Rechenansatz uebersah dieses `rh` und haette die
+Decke faelschlich viel zu niedrig gesetzt. Real gemessene Kopfhoehen:
+
+| Zustand | Kopfhoehe ueber Boden |
+|---|---|
+| Stehen/Ducken (kein Sprung) | 30-47 |
+| Kuerzester Tipp-Sprung | ~112 |
+| Voll gehaltener Sprung | ~169 |
+
+`CAVE_MIN_GAP` (136) liegt bewusst zwischen 112 und 169: ein kurzer Tipp
+bleibt an jeder Stelle sicher (Bodenhindernisse bleiben ueberspringbar),
+ein voller Sprung nicht mehr. `CAVE_MAX_GAP` (210) liegt ueber 169 - offene
+Abschnitte schraenken also gar nichts ein. Stalaktiten-Spitzen (65-105)
+liegen unter 112: im Stehen/Ducken immer sicher, jeder Sprung trifft sie -
+eine reine "hier nicht springen"-Zone.
+
+**Der Autopilot haette die Hoehle unspielbar gemacht.** Er haelt Spruenge
+immer voll durch (`doJump(true)` ohne `endJump()`) - Kopfhoehe ~169, ueber
+`CAVE_MIN_GAP`. Erster Soak-Test: 2583 Abstuerze in 8 Minuten,
+ausschliesslich an der Decke. Da ein kurzer Tipp Bodenhindernisse ebenso
+sicher raeumt und unter jeder Deckenhoehe bleibt, tippt der Autopilot
+jetzt in der Hoehle immer kurz statt die Deckenhoehe erst vorherzusagen
+(`runner.capAt`, loest `endJump()` automatisch aus). Ergebnis: 0 Abstuerze
+in einem anschliessenden 40-Minuten-Lauf durch Wueste, Berge und Hoehle.
+
+Drei eigene Testfehler auf dem Weg, alle beim Nachpruefen aufgefallen,
+nicht beim Ausliefern: eine Reihenfolge-Race (Bergabschnitt konnte im
+selben Frame noch starten, in dem `caveOn` gesetzt wurde - behoben durch
+Vertauschen der Pruefreihenfolge), ein Stalaktiten-Test, der das Objekt
+direkt in die Kollisionszone setzte und es dann sofort wegscrollte statt
+natuerlich ankommen zu lassen, und derselbe Fehler ein zweites Mal mit
+falschem Zeitpunkt fuer den Sprung.
+
+**Zeichenreihenfolge:** `drawCeiling()` muss nach Wolken/Bergen/Duenen
+laufen, sonst schweben Wolken sichtbar durch massiven Fels - beim ersten
+Screenshot direkt aufgefallen.

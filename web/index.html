@@ -678,6 +678,33 @@ function nextMountainGap() {
   return base * speedFactor * growth;
 }
 
+// ---------------------------------------------------------------- Hoehle ----
+// Zweite Stufe, ab CAVE_START dauerhaft (kein Zurueck wie bei den
+// Bergabschnitten). Eine Decke schraenkt die Sprunghoehe streckenweise ein.
+//
+// Die Grenzwerte sind aus der tatsaechlichen Kollisionsgeometrie abgeleitet,
+// nicht geraten: hits() misst die Kopfhoehe ueber dem Boden als (rh - runner.y)
+// mit rh=47 stehend/springend, rh=30 geduckt. Gemessene Sprunghoehen
+// (runner.y, s. JUMP_CUT_MIN weiter oben):
+//   stehen/ducken (kein Sprung)  -> Kopfhoehe 30-47
+//   kuerzester Tipp (runner.y ~-65)  -> Kopfhoehe ~112
+//   voll gehalten (runner.y ~-122)   -> Kopfhoehe ~169
+// CAVE_MIN_GAP liegt deshalb bewusst zwischen 112 und 169: ein kurzer Tipp
+// bleibt sicher (Ground-Hindernisse bleiben ueberspringbar), ein voller
+// Sprung nicht mehr. CAVE_MAX_GAP liegt ueber 169, offene Abschnitte
+// schraenken also gar nichts ein.
+var CAVE_START = 2000;
+var CAVE_MIN_GAP = 136, CAVE_MAX_GAP = 210, CAVE_WAVELEN = 3200;
+var scrollCeiling = 0;
+
+// Deckenhoehe (Abstand ueber dem Boden) an einer Weltposition, durchgehend
+// glatt statt in Segmenten wie die Duenen - dieselbe Funktion liefert sowohl
+// die Zeichnung als auch die Kollision, damit beide garantiert zusammenpassen.
+function ceilingGapAt(worldX) {
+  var wave = 0.5 + 0.5 * Math.sin((worldX / CAVE_WAVELEN) * 6.2832);
+  return CAVE_MIN_GAP + wave * (CAVE_MAX_GAP - CAVE_MIN_GAP);
+}
+
 // Schwierigkeit steigt schrittweise: am Anfang nur Kaktus, dann kommen
 // Voegel langsam dazu, danach Schlangen. "Langsam" heisst hier woertlich
 // eine lineare Rampe (rampChance) statt eines harten Ein/Aus bei einer
@@ -713,11 +740,12 @@ function newGame(attract) {
     speed: SPEED_START, distance: 0, score: 0,
     high: readNum(HIGH_KEY), last: readNum(LAST_KEY),
     time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0,
-    mountainOn: false, mountainT: 0, mountainVis: 0
+    mountainOn: false, mountainT: 0, mountainVis: 0,
+    caveOn: false, caveVis: 0
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
-    coyote: COYOTE_TIME, buffer: 0, legT: 0, frame: 0, squash: 0, dustT: 0
+    coyote: COYOTE_TIME, buffer: 0, legT: 0, frame: 0, squash: 0, dustT: 0, capAt: 0
   };
   obstacles = []; particles = []; clouds = []; pebbles = [];
   for (var i = 0; i < 6; i++) {
@@ -727,7 +755,7 @@ function newGame(attract) {
   for (var j = 0; j < 46; j++) {
     pebbles.push({ x: Math.random() * LW, y: groundY + 5 + Math.random() * 18, w: 1 + Math.random() * 3.5 });
   }
-  scrollFar = 0; scrollNear = 0; scrollPeaks = 0;
+  scrollFar = 0; scrollNear = 0; scrollPeaks = 0; scrollCeiling = 0;
   night = 0; nightDir = 0; nextNightAt = 700;
   nextMountainAt = 700 + Math.random() * 200;
   applyTheme(0);
@@ -754,8 +782,12 @@ function deathBurst(x, y) {
 }
 
 // ======================================================== Hindernisse ======
+// Manche Zweige erzwingen einen Mindestabstand fuer den naechsten Spawn
+// (z.B. nach einem Stalaktiten) - dafuer wird ein Rueckgabewert genutzt,
+// den der Aufrufer statt obstacleGap() nimmt (siehe dort).
 function spawnObstacle() {
   if (state.mountainOn) { spawnRock(); return; }
+  if (state.caveOn && Math.random() < 0.22) { return spawnStalactite(); }
   if (Math.random() < rampChance(BIRD_START, BIRD_RAMP, BIRD_TARGET)) {
     var hs = [groundY - 80, groundY - 54, groundY - 26];
     obstacles.push({ kind: "bird", x: LW + 20, y: hs[Math.floor(Math.random() * hs.length)],
@@ -775,6 +807,22 @@ function spawnObstacle() {
   obstacles.push({ kind: "cactus", x: LW + 20, y: groundY - ch,
                    w: count * cw + (count - 1) * gap, h: ch,
                    count: count, cw: cw, ch: ch, gap: gap });
+}
+
+// Stalaktit: haengt von der aktuellen Deckenwelle herab, seine Spitze bleibt
+// unter der Kopfhoehe eines kuerzesten Sprungs (siehe CAVE_MIN_GAP-Kommentar)
+// - im Stehen/Ducken immer sicher, jeder Sprung darunter trifft ihn. Danach
+// ein grosszuegiger erzwungener Mindestabstand: eine "hier nicht springen"-
+// Zone darf nicht mit einem Ground-Hindernis ueberlappen, das einen Sprung
+// verlangt - das waere ein unloesbarer Widerspruch.
+var STALACTITE_TIP_MIN = 65, STALACTITE_TIP_MAX = 105;
+function spawnStalactite() {
+  var spawnX = LW + 20;
+  var gap = ceilingGapAt(scrollCeiling + spawnX);
+  var tip = STALACTITE_TIP_MIN + Math.random() * (STALACTITE_TIP_MAX - STALACTITE_TIP_MIN);
+  var h = Math.max(10, gap - tip);
+  obstacles.push({ kind: "stalactite", x: spawnX, y: groundY - gap, w: 34, h: h });
+  return 170 + Math.random() * 80;
 }
 
 // Felsen: rund, rollt herunter und wird waehrend der Fahrt schneller (siehe
@@ -828,11 +876,26 @@ function autoPilot() {
     if (o.kind === "bird") {
       if (o.y <= groundY - 70) { continue; }
       want = (o.y <= groundY - 40) ? "duck" : "jump";
+    } else if (o.kind === "stalactite") {
+      want = "duck";   // Stalaktiten verlangen "nicht springen", nie ueberspringbar
     } else { want = "jump"; }
     if (want === "jump" && tContact > tTrigger) { want = "wait"; }
     break;
   }
-  if (want === "jump") { runner.ducking = false; if (runner.coyote > 0) { doJump(true); } }
+  if (want === "jump") {
+    runner.ducking = false;
+    if (runner.coyote > 0) {
+      doJump(true);
+      // In der Hoehle haelt der Autopilot sonst immer voll durch (Kopfhoehe
+      // ~169), das liegt ueber der enGsten Deckengrenze (136) - er starb
+      // dort praktisch bei jedem Sprung (2583 Abstuerze in 8 Minuten,
+      // ausschliesslich an der Decke). Ein kurzer Tipp (Kopfhoehe ~112)
+      // raeumt Bodenhindernisse genauso sicher und bleibt unter jeder
+      // Deckenhoehe - also einfach immer kurz tippen, sobald die Hoehle an
+      // ist, statt die Deckenhoehe erst vorherzusagen.
+      if (state.caveOn) { runner.capAt = 0.02; }
+    }
+  }
   else if (want === "duck") { runner.ducking = true; }
   else if (want === "none") { runner.ducking = false; }
 }
@@ -861,12 +924,23 @@ function update(dt) {
       state.flash = 1.0;
       if (!state.attract) { SFX.point(); }
     }
+    // Vor der Berg-Pruefung: sonst koennte im selben Frame, in dem der
+    // Score CAVE_START erreicht, noch ein Bergabschnitt starten, weil
+    // caveOn erst danach gesetzt worden waere.
+    if (!state.caveOn && state.score >= CAVE_START) {
+      state.caveOn = true;
+    }
+
     if (settings.cycle && state.score >= nextNightAt) {
       nextNightAt += 700;
       nightDir = (night > 0.5) ? -1 : 1;
     }
 
-    if (!state.mountainOn && state.score >= nextMountainAt) {
+    // Sobald die Hoehle beginnt, werden keine neuen Bergabschnitte mehr
+    // angesetzt (rollende Felsen von fernen Gipfeln passen nicht mehr ins
+    // Bild einer Hoehle) - ein bereits laufender Abschnitt endet aber ganz
+    // normal, kein harter Abbruch.
+    if (!state.caveOn && !state.mountainOn && state.score >= nextMountainAt) {
       state.mountainOn = true;
       state.mountainT = MOUNTAIN_LEN;
       state.spawnIn = Math.min(state.spawnIn, 16);   // baldiger erster Fels
@@ -880,6 +954,7 @@ function update(dt) {
       }
     }
   }
+  state.caveVis += ((state.caveOn ? 1 : 0) - state.caveVis) * Math.min(1, dt * 1.2);
   // Weiche Ein-/Ausblendung der Bergkette, unabhaengig von "running" -
   // sonst friert die Kulisse mitten im Uebergang ein, wenn die Figur stirbt.
   state.mountainVis += ((state.mountainOn ? 1 : 0) - state.mountainVis) * Math.min(1, dt * 2.4);
@@ -893,6 +968,10 @@ function update(dt) {
   if (runner.onGround) { runner.coyote = COYOTE_TIME; }
   else if (runner.coyote > 0) { runner.coyote -= dt; }
   if (runner.buffer > 0) { runner.buffer -= dt; }
+  if (runner.capAt > 0) {
+    runner.capAt -= dt;
+    if (runner.capAt <= 0) { endJump(); }
+  }
 
   var g = GRAV_UP;
   if (runner.vy > 0) { g = runner.ducking ? GRAV_FAST : GRAV_DOWN; }
@@ -936,6 +1015,7 @@ function update(dt) {
 
   var dx = state.speed * dt;
   scrollPeaks += dx * 0.045; scrollFar += dx * 0.10; scrollNear += dx * 0.24;
+  if (state.caveVis > 0.01) { scrollCeiling += dx; }   // 1:1, nicht parallax - echte Kollisionsflaeche
 
   var i;
   for (i = 0; i < clouds.length; i++) {
@@ -956,7 +1036,10 @@ function update(dt) {
   }
 
   state.spawnIn -= dx;
-  if (state.spawnIn <= 0) { spawnObstacle(); state.spawnIn = obstacleGap(); }
+  if (state.spawnIn <= 0) {
+    var forcedGap = spawnObstacle();
+    state.spawnIn = forcedGap || obstacleGap();
+  }
 
   for (i = obstacles.length - 1; i >= 0; i--) {
     var o = obstacles[i];
@@ -971,6 +1054,17 @@ function update(dt) {
     if (o.kind === "bird") { o.flap += dt * 10; }
     if (o.x + o.w < -20) { obstacles.splice(i, 1); continue; }
     if (hits(o)) { die(); return; }
+  }
+
+  // Deckenkollision: erst toedlich, wenn die Decke weitgehend eingeblendet
+  // ist (0.9), sonst koennte man mitten im Einblenden an einer noch kaum
+  // sichtbaren Flaeche sterben. Dieselbe ceilingGapAt()-Funktion wie beim
+  // Zeichnen, damit sichtbare und toedliche Decke garantiert uebereinstimmen.
+  if (state.caveVis > 0.9) {
+    var rh2 = runner.ducking ? 30 : runner.h;
+    var headTop = rh2 - runner.y;
+    var gap = ceilingGapAt(scrollCeiling + RUNNER_X);
+    if (headTop > gap - 3) { die(); return; }
   }
 }
 
@@ -1315,6 +1409,34 @@ function drawRock(o) {
   ctx.globalAlpha = 1;
   ctx.restore();
 }
+// Deckenflaeche: dieselbe ceilingGapAt()-Funktion wie die Kollision, damit
+// sichtbare und toedliche Decke garantiert zusammenpassen.
+function drawCeiling() {
+  if (state.caveVis <= 0.01) { return; }
+  G = ctx;
+  var STEP = 40;
+  ctx.globalAlpha = state.caveVis;
+  ctx.fillStyle = theme.ground;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  for (var x = 0; x <= LW; x += STEP) {
+    ctx.lineTo(x, groundY - ceilingGapAt(scrollCeiling + x));
+  }
+  ctx.lineTo(LW, groundY - ceilingGapAt(scrollCeiling + LW));
+  ctx.lineTo(LW, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+function drawStalactite(o) {
+  G = ctx; ctx.fillStyle = theme.ground;
+  ctx.beginPath();
+  ctx.moveTo(o.x, o.y);
+  ctx.lineTo(o.x + o.w, o.y);
+  ctx.lineTo(o.x + o.w / 2, o.y + o.h);
+  ctx.closePath();
+  ctx.fill();
+}
 function drawSnake(o) {
   G = ctx; ctx.fillStyle = theme.ground;
   var segs = 5, sw = o.w / segs, t = state.time * 6;
@@ -1361,12 +1483,16 @@ function render() {
   drawDunes(scrollFar,  groundY - 26, 34, 190, theme.duneFar);
   drawDunes(scrollNear, groundY - 8,  22, 130, theme.duneNear);
   drawClouds();
+  drawCeiling();   // nach Wolken/Bergen/Duenen - die Decke deckt Himmel und
+                    // Kulisse darunter ab, sonst wuerden Wolken sichtbar
+                    // durch massiven Fels hindurch schweben.
   drawGround();
   for (var i = 0; i < obstacles.length; i++) {
     var ob = obstacles[i];
     if (ob.kind === "bird") { drawBird(ob); }
     else if (ob.kind === "rock") { drawRock(ob); }
     else if (ob.kind === "snake") { drawSnake(ob); }
+    else if (ob.kind === "stalactite") { drawStalactite(ob); }
     else { drawCactus(ob); }
   }
   drawParticles();
