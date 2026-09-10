@@ -663,6 +663,20 @@ var lastTime = 0, night = 0, nightDir = 0, nextNightAt = 700;
 // blendet weich ein/aus statt hart umzuschalten).
 var MOUNTAIN_LEN = 12, MOUNTAIN_GAP_MIN = 500, MOUNTAIN_GAP_RAND = 400;
 var nextMountainAt = 260;
+
+// Schwierigkeit steigt schrittweise: am Anfang nur Kaktus, dann kommen
+// Voegel langsam dazu, danach Schlangen. "Langsam" heisst hier woertlich
+// eine lineare Rampe (rampChance) statt eines harten Ein/Aus bei einer
+// Score-Schwelle - die alte Schwelle bei Vogel (score>320) sprang von 0
+// auf 24% in einem Frame.
+var BIRD_START = 120, BIRD_RAMP = 280, BIRD_TARGET = 0.22;
+var SNAKE_START = 380, SNAKE_RAMP = 320, SNAKE_TARGET = 0.20;
+
+function rampChance(start, len, target) {
+  if (state.score < start) { return 0; }
+  if (state.score >= start + len) { return target; }
+  return target * (state.score - start) / len;
+}
 var scrollFar = 0, scrollNear = 0, scrollPeaks = 0;
 
 // Felsen rollen zusaetzlich zum normalen Weltscroll - Extratempo waechst mit
@@ -728,13 +742,13 @@ function deathBurst(x, y) {
 // ======================================================== Hindernisse ======
 function spawnObstacle() {
   if (state.mountainOn) { spawnRock(); return; }
-  if (state.score > 320 && Math.random() < 0.24) {
+  if (Math.random() < rampChance(BIRD_START, BIRD_RAMP, BIRD_TARGET)) {
     var hs = [groundY - 80, groundY - 54, groundY - 26];
     obstacles.push({ kind: "bird", x: LW + 20, y: hs[Math.floor(Math.random() * hs.length)],
                      w: 38, h: 26, flap: Math.random() * 6 });
     return;
   }
-  if (Math.random() < 0.20) {
+  if (Math.random() < rampChance(SNAKE_START, SNAKE_RAMP, SNAKE_TARGET)) {
     // Schlange: niedrig und breit statt hoch und schmal. Vermessen:
     // sicher bis Breite 55, ab 58 trifft es. 42-52 haelt Abstand zur Grenze.
     var sw = 42 + Math.random() * 10;

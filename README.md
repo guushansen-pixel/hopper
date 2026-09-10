@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.9" -VersionCode 12 -Force
+              -VersionName "1.10" -VersionCode 13 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -319,3 +319,22 @@ Kulisse im Menue, nicht echte Spielsicherheit - die Kollisionsgrenze pro
 Fels ist unabhaengig davon direkt vermessen (siehe oben). Weiter zu
 verbessern waere ein zweites Hindernis in die Trigger-Berechnung
 einzubeziehen statt nur das naechste; aktuell nicht umgesetzt.
+
+## Schwierigkeit steigt schrittweise: erst Kaktus, dann Vogel, dann Schlange
+
+Vorher waren Schlange (ab Score 0, 20%) und Vogel (ab Score 320, dann
+sofort 24%) mit festen Schwellen gesetzt - Vogel sprang in einem Frame
+von 0% auf 24%. Jetzt gibt es eine lineare Rampe (`rampChance()`): bis
+`BIRD_START` (120) ausschliesslich Kaktus, danach waechst die Vogelquote
+ueber `BIRD_RAMP` (280 Punkte) linear von 0 auf `BIRD_TARGET` (22%).
+Schlange folgt genauso ab `SNAKE_START` (380, also nachdem der Vogel
+schon eine Weile dabei ist) ueber `SNAKE_RAMP` (320) bis `SNAKE_TARGET`
+(20%). Rock/Bergabschnitte sind davon unberuehrt - eigenes, exklusives
+Ereignis-System (siehe oben).
+
+Verifiziert per Stichprobe (`spawnObstacle()` viele Male bei fest
+gesetztem `state.score` aufgerufen, ohne echte Zeit vergehen zu lassen):
+bei Score 0 ausschliesslich Kaktus, Vogelanteil in der Rampenmitte nahe
+der halben Zielquote, Schlange bleibt vor `SNAKE_START` bei 0, beide
+Anteile erreichen spaeter ihre Zielquote, Vogelanteil waechst monoton
+mit dem Score.
