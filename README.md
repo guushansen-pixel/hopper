@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.13" -VersionCode 16 -Force
+              -VersionName "1.14" -VersionCode 17 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -440,3 +440,40 @@ tatsaechlich mit caveOn/caveVis/Score/Tempo wie oben beschrieben, 8
 Minuten Autopilot-Soak direkt ab Hoehlenstart ohne neue Abstuerze
 (nutzt den bereits fuer 1.12 verifizierten Autopilot-Kurztipp-Fix von
 Anfang an, nicht erst nach Erreichen der Hoehle).
+
+## Zwei getrennte Level statt einer durchgehenden Runde
+
+Grundlegende Umstellung: Level 1 (Wueste) endet jetzt bei Erreichen von
+`CAVE_START`, statt nahtlos in Hoehleninhalte ueberzugehen - kein
+`caveOn`-Umschalten mehr mitten im Lauf. `completeLevel()` ersetzt den
+alten Trigger: schaltet Level 2 dauerhaft frei (`unlockCave()`, wie schon
+in 1.13), schreibt Level 1s Highscore (`HIGH_KEY`/`LAST_KEY`) und setzt
+`settings.startCave = true`, damit "Level 2 spielen" sofort funktioniert.
+Level 2 ist ein eigener, spaeter separat gestarteter Lauf (`newGame()`
+mit `settings.startCave && caveUnlocked`), der wieder bei Score 0 und
+`SPEED_START` beginnt - "am Anfang wieder langsam", nicht die Fortsetzung
+von Level 1s Tempo. Eigene Highscore-Schluessel (`CAVE_HIGH_KEY`/
+`CAVE_LAST_KEY`), damit die beiden Level sich nicht gegenseitig
+ueberschreiben.
+
+Das Game-Over-Overlay wird fuer beide Faelle wiederverwendet (dynamischer
+Titel/Button-Text: "Vorbei"/"Nochmal" bei Tod, "Level 1 geschafft!"/
+"Level 2 spielen" bei Levelabschluss) statt ein zweites, fast identisches
+Overlay zu pflegen.
+
+**Sonderfall Vorfuehrmodus:** Im Hintergrund der Lobby soll kein Overlay
+die Kulisse unterbrechen. `completeLevel()` prueft `state.attract` zuerst
+und setzt dort weiterhin nur `caveOn = true` (die alte 1.12-Mechanik,
+nur fuer die Demo reserviert) - die Lobby-Kulisse geht sichtbar von der
+Wueste in die Hoehle ueber, ohne dass ein echter Levelwechsel stattfindet
+oder ein Overlay aufploppt.
+
+Vier eigene Testfehler beim Verifizieren, alle Zustandslecks zwischen
+Testlaeufen in derselben Browser-Seite (keine Spielfehler): Score nur
+einen statt zwei Frames vor der Schwelle gesetzt (ein Frame reichte nicht
+zum Ueberschreiten), `settings.startCave`/`caveUnlocked` aus einem
+vorherigen Testblock nicht zurueckgesetzt (liess `newGame(false)`
+faelschlich `caveOn=true` liefern), und der `setTimeout(...,420)` in
+`showLevelComplete()` (identisch zu `showGameOver()`) kann in einem rein
+synchronen Testskript nicht feuern - erst mit echtem `await` im Test
+bestaetigt.

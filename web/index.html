@@ -248,7 +248,7 @@
       <div><span>Zuletzt</span><b id="mLast">00000</b></div>
     </div>
     <div class="row" id="caveStartRow" hidden>
-      <span class="lbl">Hoehlenstart<span class="sub">Direkt in der Hoehle beginnen</span></span>
+      <span class="lbl">Level 2: Hoehle<span class="sub">Statt Level 1 (Wueste) spielen</span></span>
       <button class="switch" id="swCaveStart" role="switch" aria-checked="false" aria-label="Hoehlenstart"></button>
     </div>
     <button class="primary" id="btnPlay">Spielen</button>
@@ -465,6 +465,10 @@ var SET_KEY  = "hopper.settings";
 var LOOK_KEY = "hopper.look";
 var HIGH_KEY = "hopper.highscore";
 var LAST_KEY = "hopper.last";
+// Level 2 (Hoehle) ist ein eigener, getrennter Lauf - eigener Highscore
+// statt denselben Zaehler wie die Wueste weiterzufuehren.
+var CAVE_HIGH_KEY = "hopper.cave.highscore";
+var CAVE_LAST_KEY = "hopper.cave.last";
 var CAVE_UNLOCK_KEY = "hopper.caveUnlocked";
 
 // Dauerhafte Freischaltung: sobald die Hoehle einmal im echten Spiel
@@ -750,16 +754,17 @@ function buildStars() {
 }
 
 function newGame(attract) {
-  // Nur waehlbar, wenn die Hoehle schon einmal erreicht wurde - startCave
-  // koennte sonst veraltet "an" im Speicher stehen, waere aber nie sichtbar
-  // gesetzt worden, ohne dass caveUnlocked ebenfalls wahr ist.
+  // Level 2 (Hoehle) ist ein eigener, getrennter Lauf: eigenes Tempo (wieder
+  // langsam, nicht die Fortsetzung von Level 1), eigener Score bei 0, eigener
+  // Highscore. Nur waehlbar, wenn die Hoehle schon einmal erreicht wurde -
+  // startCave koennte sonst veraltet "an" im Speicher stehen, ohne dass
+  // caveUnlocked ebenfalls wahr ist.
   var startInCave = settings.startCave && caveUnlocked;
-  var startScore = startInCave ? CAVE_START : 0;
   state = {
     phase: "running", attract: !!attract,
-    speed: startInCave ? SPEED_MAX : SPEED_START,
-    distance: startScore * 14, score: startScore,
-    high: readNum(HIGH_KEY), last: readNum(LAST_KEY),
+    speed: SPEED_START, distance: 0, score: 0,
+    high: readNum(startInCave ? CAVE_HIGH_KEY : HIGH_KEY),
+    last: readNum(startInCave ? CAVE_LAST_KEY : LAST_KEY),
     time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0,
     mountainOn: false, mountainT: 0, mountainVis: 0,
     caveOn: startInCave, caveVis: startInCave ? 1 : 0
@@ -945,12 +950,13 @@ function update(dt) {
       state.flash = 1.0;
       if (!state.attract) { SFX.point(); }
     }
-    // Vor der Berg-Pruefung: sonst koennte im selben Frame, in dem der
-    // Score CAVE_START erreicht, noch ein Bergabschnitt starten, weil
-    // caveOn erst danach gesetzt worden waere.
+    // Level 1 (Wueste) endet hier, statt in Level 2 ueberzugehen - siehe
+    // completeLevel(). caveOn ist waehrend eines Wuestenlaufs immer false
+    // (wird nur beim Start eines Hoehlenlaufs gesetzt), die Pruefung greift
+    // also nur einmal, danach sorgt phase !== "running" fuer Ruhe.
     if (!state.caveOn && state.score >= CAVE_START) {
-      state.caveOn = true;
-      if (!state.attract) { unlockCave(); }   // nur echtes Spiel schaltet frei
+      completeLevel();
+      return;
     }
 
     if (settings.cycle && state.score >= nextNightAt) {
@@ -1110,11 +1116,38 @@ function die() {
   if (settings.shake) { state.shake = 1; }
   deathBurst(RUNNER_X + 24, groundY - 26 + runner.y);
   SFX.die();
+  var hk = state.caveOn ? CAVE_HIGH_KEY : HIGH_KEY;
+  var lk = state.caveOn ? CAVE_LAST_KEY : LAST_KEY;
+  var record = state.score > state.high;
+  if (record) { state.high = state.score; writeNum(hk, state.high); }
+  state.last = state.score;
+  writeNum(lk, state.score);
+  showGameOver(record);
+}
+
+// Level 1 (Wueste) endet hier - nicht durch Sterben, sondern durch
+// Erreichen von CAVE_START. Kein Uebergang in dieselbe Runde mehr: Level 2
+// ist ein eigener, spaeter separat gestarteter Lauf (siehe newGame()).
+function completeLevel() {
+  if (state.attract) {
+    // Vorfuehrmodus: keine Overlay-Unterbrechung der Lobby-Kulisse - geht
+    // einfach nahtlos in die Hoehlenkulisse ueber (wie Level 2, aber ohne
+    // echten Punktestand-Effekt, das ist hier nur Dekoration).
+    state.caveOn = true;
+    return;
+  }
+  state.phase = "cleared"; state.deadT = 0;
+  unlockCave();
   var record = state.score > state.high;
   if (record) { state.high = state.score; writeNum(HIGH_KEY, state.high); }
   state.last = state.score;
   writeNum(LAST_KEY, state.score);
-  showGameOver(record);
+  // Naechster Lauf zielt automatisch auf Level 2 - wer "Nochmal" bzw.
+  // gleich "Level 2 spielen" drueckt, landet direkt dort.
+  settings.startCave = true;
+  saveJson(SET_KEY, settings);
+  SFX.point();
+  showLevelComplete();
 }
 
 // =========================================================== Zeichnen ======
@@ -1620,10 +1653,13 @@ function show(name) {
   elPause.hidden  = (name !== "game");
 }
 function refreshMenu() {
-  document.getElementById("mHigh").textContent = pad5(readNum(HIGH_KEY));
-  document.getElementById("mLast").textContent = pad5(readNum(LAST_KEY));
+  // Zeigt den Highscore des gerade gewaehlten Levels, nicht immer Level 1 -
+  // sonst wirkt der Wert nach dem Umschalten auf Level 2 falsch/veraltet.
+  var caveMode = settings.startCave && caveUnlocked;
+  document.getElementById("mHigh").textContent = pad5(readNum(caveMode ? CAVE_HIGH_KEY : HIGH_KEY));
+  document.getElementById("mLast").textContent = pad5(readNum(caveMode ? CAVE_LAST_KEY : LAST_KEY));
   elCaveStartRow.hidden = !caveUnlocked;
-  elSwCaveStart.setAttribute("aria-checked", (settings.startCave && caveUnlocked) ? "true" : "false");
+  elSwCaveStart.setAttribute("aria-checked", caveMode ? "true" : "false");
 }
 function toMenu() {
   newGame(true);
@@ -1651,7 +1687,19 @@ function showGameOver(record) {
   document.getElementById("oHigh").textContent = pad5(state.high);
   document.getElementById("overTitle").textContent = record ? "Bestwert!" : "Vorbei";
   document.getElementById("overTag").innerHTML = record ? "Neuer persoenlicher Rekord" : "&nbsp;";
+  document.getElementById("btnAgain").textContent = "Nochmal";
   setTimeout(function () { if (state.phase === "dead") { show("over"); } }, 420);
+}
+// Level 1 (Wueste) endet erfolgreich statt durch Sterben - eigener Text und
+// eigener Primary-Button auf demselben Overlay wie showGameOver(), damit
+// nicht ein zweites, fast identisches Overlay gepflegt werden muss.
+function showLevelComplete() {
+  document.getElementById("oScore").textContent = pad5(state.score);
+  document.getElementById("oHigh").textContent = pad5(state.high);
+  document.getElementById("overTitle").textContent = "Level 1 geschafft!";
+  document.getElementById("overTag").innerHTML = "Hoehle freigeschaltet";
+  document.getElementById("btnAgain").textContent = "Level 2 spielen";
+  setTimeout(function () { if (state.phase === "cleared") { show("over"); } }, 420);
 }
 function openSettings(from) { settingsFrom = from; syncSwitches(); show("settings"); SFX.ui(); }
 function closeSettings() {
