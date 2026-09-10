@@ -719,6 +719,22 @@ function spawnObstacle() {
                      w: 38, h: 26, flap: Math.random() * 6 });
     return;
   }
+  var r = Math.random();
+  if (r < 0.16) {
+    // Felsen: ein einzelner, gedrungener Brocken statt einer Gruppe.
+    // Bereich vermessen wie JUMP_CUT_MIN: der kuerzeste Tipp raeumt bis
+    // Hoehe 54, ab 56 trifft es. 40-52 haelt sicheren Abstand zur Grenze.
+    var rh = 40 + Math.random() * 12;
+    obstacles.push({ kind: "rock", x: LW + 20, y: groundY - rh, w: 30, h: rh });
+    return;
+  }
+  if (r < 0.32) {
+    // Schlange: niedrig und breit statt hoch und schmal. Vermessen wie oben:
+    // sicher bis Breite 55, ab 58 trifft es. 42-52 haelt Abstand zur Grenze.
+    var sw = 42 + Math.random() * 10;
+    obstacles.push({ kind: "snake", x: LW + 20, y: groundY - 16, w: sw, h: 16 });
+    return;
+  }
   var tall = Math.random() < 0.45;
   var count = 1 + Math.floor(Math.random() * (state.score > 180 ? 3 : 2));
   var cw = tall ? 17 : 15, ch = tall ? 50 : 36, gap = 4;
@@ -1158,6 +1174,24 @@ function drawBird(o) {
   else    { rr(o.x + 9, o.y + 16, 19, 9, 4.5); }
 }
 
+function drawRock(o) {
+  G = ctx; ctx.fillStyle = theme.ground;
+  rr(o.x, o.y + o.h * 0.22, o.w, o.h * 0.78, 8);
+  rr(o.x + o.w * 0.18, o.y, o.w * 0.62, o.h * 0.5, 7);
+}
+function drawSnake(o) {
+  G = ctx; ctx.fillStyle = theme.ground;
+  var segs = 5, sw = o.w / segs, t = state.time * 6;
+  for (var i = 0; i < segs; i++) {
+    var wob = Math.sin(t + i * 0.9) * 2;
+    rr(o.x + i * sw, o.y + o.h * 0.3 + wob, sw + 2, o.h * 0.55, o.h * 0.3);
+  }
+  var hx = o.x + o.w - 4, hy = o.y - 2 + Math.sin(t + segs * 0.9) * 2;
+  rr(hx, hy, 14, o.h * 0.75, o.h * 0.35);
+  ctx.fillStyle = theme.skyBot;
+  rr(hx + 8, hy + 2, 3, 3, 1.5);
+}
+
 function pad5(n) {
   var s = String(n);
   while (s.length < 5) { s = "0" + s; }
@@ -1192,7 +1226,11 @@ function render() {
   drawClouds();
   drawGround();
   for (var i = 0; i < obstacles.length; i++) {
-    if (obstacles[i].kind === "bird") { drawBird(obstacles[i]); } else { drawCactus(obstacles[i]); }
+    var ob = obstacles[i];
+    if (ob.kind === "bird") { drawBird(ob); }
+    else if (ob.kind === "rock") { drawRock(ob); }
+    else if (ob.kind === "snake") { drawSnake(ob); }
+    else { drawCactus(ob); }
   }
   drawParticles();
   paintRunner(ctx, RUNNER_X, groundY + runner.y, runnerOpts());

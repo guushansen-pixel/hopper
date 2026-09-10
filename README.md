@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.6" -VersionCode 9 -Force
+              -VersionName "1.7" -VersionCode 10 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -219,3 +219,31 @@ aus"). Jetzt liegt die breite Basis am Kopf, die Spitze zeigt weg davon.
 Der Schwanz bekam denselben Blick: die Kruemmung am Ende sitzt jetzt sichtbar
 versetzt ueber der Linie statt mittig draufgesetzt, damit sie wie eine
 Kruemmung aussieht statt wie eine Beule.
+
+## Zwei weitere Hindernisse: Felsen und Schlange
+
+Spawn-Gewichtung: 16% Felsen, 16% Schlange, Rest Kaktus/Vogel wie bisher.
+Kollision und Autopilot brauchten keine Aenderung - `hits()` ist eine
+generische AABB-Pruefung gegen `x/y/w/h`, und `autoPilot()` behandelt jedes
+Bodenhindernis, das nicht `kind === "bird"` ist, bereits gleich (Sprung,
+Breiten- und tempoabhaengig ausgeloest). Neu waren nur `spawnObstacle()`
+(zwei weitere Zweige), `drawRock`/`drawSnake` und die Dispatch-Zeile in
+`render()`.
+
+**Groessen sind vermessen, nicht geschaetzt** - dieselbe Methode wie bei
+`JUMP_CUT_MIN`: der Autopilot ueberstand beide neuen Typen ohne einen
+einzigen Abstuerze, aber er springt nie kurz ab (`doJump(true)` ohne
+`endJump()`), das haette eine zu hohe/breite Kollisionsbox nie aufgedeckt.
+Direkt gemessen, welche Groesse der kuerzeste Tipp (16ms) noch raeumt:
+
+| | raeumt bis | trifft ab | Spawn-Bereich |
+|---|---|---|---|
+| Felsenhoehe | 54 | 56 | 40-52 |
+| Schlangenbreite | 55 | 58 | 42-52 |
+
+Wer diese Werte aendert, sollte mit derselben Methode nachmessen - ein
+Hindernis natuerlich scrollen lassen (`obstacles.push(...)` einmal, dann
+mehrfach `update(1/60)`, kein `x` pro Frame neu setzen), nicht die
+Sprung-Scheitelhoehe mit der Hindernishoehe vergleichen. Ein erster Versuch
+dazu hat genau diesen Fehler gemacht und faelschlich "trifft" gemeldet, wo
+tatsaechlich "raeumt" galt.
