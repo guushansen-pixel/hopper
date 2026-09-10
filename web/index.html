@@ -247,6 +247,10 @@
       <div><span>Bestwert</span><b id="mHigh">00000</b></div>
       <div><span>Zuletzt</span><b id="mLast">00000</b></div>
     </div>
+    <div class="row" id="caveStartRow" hidden>
+      <span class="lbl">Hoehlenstart<span class="sub">Direkt in der Hoehle beginnen</span></span>
+      <button class="switch" id="swCaveStart" role="switch" aria-checked="false" aria-label="Hoehlenstart"></button>
+    </div>
     <button class="primary" id="btnPlay">Spielen</button>
     <button id="btnWardrobe">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
@@ -461,8 +465,19 @@ var SET_KEY  = "hopper.settings";
 var LOOK_KEY = "hopper.look";
 var HIGH_KEY = "hopper.highscore";
 var LAST_KEY = "hopper.last";
+var CAVE_UNLOCK_KEY = "hopper.caveUnlocked";
 
-var settings = { music: true, sfx: true, shake: true, cycle: true };
+// Dauerhafte Freischaltung: sobald die Hoehle einmal im echten Spiel
+// (nicht im Vorfuehrmodus) erreicht wurde, bleibt sie fuer immer waehlbar.
+var caveUnlocked = false;
+try { caveUnlocked = localStorage.getItem(CAVE_UNLOCK_KEY) === "1"; } catch (e) {}
+function unlockCave() {
+  if (caveUnlocked) { return; }
+  caveUnlocked = true;
+  try { localStorage.setItem(CAVE_UNLOCK_KEY, "1"); } catch (e) {}
+}
+
+var settings = { music: true, sfx: true, shake: true, cycle: true, startCave: false };
 var look = { color: "auto", hat: "none", shape: "dog" };
 
 // Drei Silhouetten statt nur einer - Ohren und Schwanz unterscheiden sich,
@@ -735,13 +750,19 @@ function buildStars() {
 }
 
 function newGame(attract) {
+  // Nur waehlbar, wenn die Hoehle schon einmal erreicht wurde - startCave
+  // koennte sonst veraltet "an" im Speicher stehen, waere aber nie sichtbar
+  // gesetzt worden, ohne dass caveUnlocked ebenfalls wahr ist.
+  var startInCave = settings.startCave && caveUnlocked;
+  var startScore = startInCave ? CAVE_START : 0;
   state = {
     phase: "running", attract: !!attract,
-    speed: SPEED_START, distance: 0, score: 0,
+    speed: startInCave ? SPEED_MAX : SPEED_START,
+    distance: startScore * 14, score: startScore,
     high: readNum(HIGH_KEY), last: readNum(LAST_KEY),
     time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0,
     mountainOn: false, mountainT: 0, mountainVis: 0,
-    caveOn: false, caveVis: 0
+    caveOn: startInCave, caveVis: startInCave ? 1 : 0
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
@@ -929,6 +950,7 @@ function update(dt) {
     // caveOn erst danach gesetzt worden waere.
     if (!state.caveOn && state.score >= CAVE_START) {
       state.caveOn = true;
+      if (!state.attract) { unlockCave(); }   // nur echtes Spiel schaltet frei
     }
 
     if (settings.cycle && state.score >= nextNightAt) {
@@ -1583,6 +1605,8 @@ var elPaused = document.getElementById("paused");
 var elOver = document.getElementById("over");
 var elGear = document.getElementById("gearBtn");
 var elPause = document.getElementById("pauseBtn");
+var elCaveStartRow = document.getElementById("caveStartRow");
+var elSwCaveStart = document.getElementById("swCaveStart");
 var settingsFrom = "menu";
 
 function show(name) {
@@ -1598,6 +1622,8 @@ function show(name) {
 function refreshMenu() {
   document.getElementById("mHigh").textContent = pad5(readNum(HIGH_KEY));
   document.getElementById("mLast").textContent = pad5(readNum(LAST_KEY));
+  elCaveStartRow.hidden = !caveUnlocked;
+  elSwCaveStart.setAttribute("aria-checked", (settings.startCave && caveUnlocked) ? "true" : "false");
 }
 function toMenu() {
   newGame(true);
@@ -1721,6 +1747,13 @@ SWITCHES.forEach(function (s) {
   });
 });
 
+elSwCaveStart.addEventListener("click", function () {
+  audioInit();
+  settings.startCave = !settings.startCave;
+  saveJson(SET_KEY, settings);
+  refreshMenu();
+  SFX.ui();
+});
 document.getElementById("btnPlay").addEventListener("click", function () { SFX.ui(); startGame(); });
 document.getElementById("btnWardrobe").addEventListener("click", openWardrobe);
 document.getElementById("wBack").addEventListener("click", function () { SFX.ui(); toMenu(); });

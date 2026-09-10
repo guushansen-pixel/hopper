@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.12" -VersionCode 15 -Force
+              -VersionName "1.13" -VersionCode 16 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -411,3 +411,32 @@ falschem Zeitpunkt fuer den Sprung.
 **Zeichenreihenfolge:** `drawCeiling()` muss nach Wolken/Bergen/Duenen
 laufen, sonst schweben Wolken sichtbar durch massiven Fels - beim ersten
 Screenshot direkt aufgefallen.
+
+## Hoehlenstart: dauerhafte Freischaltung + Wahl in der Lobby
+
+Sobald die Hoehle einmal in einem echten Spiel (nicht im Vorfuehrmodus)
+erreicht wurde, ruft `unlockCave()` einmalig `localStorage.setItem` auf
+(`hopper.caveUnlocked`). Danach erscheint in der Lobby ein Schalter
+"Hoehlenstart" (`settings.startCave`, ueber den bestehenden Settings-
+Speicherpfad persistiert, kein eigener Schluessel noetig).
+
+`newGame()` prueft `settings.startCave && caveUnlocked` (beide, nicht nur
+einer - ein veraltet "an" gespeicherter Schalter ohne echte Freischaltung
+darf nicht wirken) und initialisiert bei Hoehlenstart direkt:
+`score = CAVE_START`, `distance` passend dazu, `speed = SPEED_MAX`,
+`caveOn = true`, `caveVis = 1` (kein Einblenden noetig - man startet
+bewusst schon drin). Bergabschnitte bleiben dabei aus (caveOn blockiert
+sie von Anfang an), Vogel-/Schlangenrampen stehen durch den hohen Score
+sofort auf Zielwert - konsistent mit "man ist schon mitten im Lauf".
+
+Der Umschalter wirkt bewusst auch auf den Vorfuehrmodus im Hintergrund
+der Lobby - dadurch zeigt die Lobby-Kulisse selbst, was die Einstellung
+bewirkt, statt dass man es erst im echten Spiel sieht.
+
+Verifiziert: Freischaltung nur bei echtem Spiel (nicht im Vorfuehrmodus),
+Schalter erscheint erst danach und ist anklickbar, Zustand persistiert
+ueber den bestehenden Settings-Pfad, ein Hoehlenstart initialisiert
+tatsaechlich mit caveOn/caveVis/Score/Tempo wie oben beschrieben, 8
+Minuten Autopilot-Soak direkt ab Hoehlenstart ohne neue Abstuerze
+(nutzt den bereits fuer 1.12 verifizierten Autopilot-Kurztipp-Fix von
+Anfang an, nicht erst nach Erreichen der Hoehle).
