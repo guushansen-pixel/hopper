@@ -931,7 +931,8 @@ function spawnStalactite() {
   var gap = ceilingGapAt(scrollCeiling + spawnX);
   var tip = STALACTITE_TIP_MIN + Math.random() * (STALACTITE_TIP_MAX - STALACTITE_TIP_MIN);
   var h = Math.max(10, gap - tip);
-  obstacles.push({ kind: "stalactite", x: spawnX, y: groundY - gap, w: 34, h: h });
+  obstacles.push({ kind: "stalactite", x: spawnX, y: groundY - gap, w: 34, h: h,
+                   seed: Math.random() * 1000 | 0 });
   return 170 + Math.random() * 80;
 }
 
@@ -952,7 +953,7 @@ function spawnPillar() {
   var tip = PILLAR_TIP_MIN + Math.random() * (PILLAR_TIP_MAX - PILLAR_TIP_MIN);
   var h = Math.max(10, gap - tip);
   obstacles.push({ kind: "pillar", x: spawnX, y: groundY - gap, w: 30, h: h,
-                   stubH: 12 + Math.random() * 8 });
+                   stubH: 12 + Math.random() * 8, seed: Math.random() * 1000 | 0 });
   return 220 + Math.random() * 100;
 }
 
@@ -1908,27 +1909,65 @@ function drawEnterWipe() {
   ctx.arc(cx, cy, r, 0, 6.2832);
   ctx.fill();
 }
+// Hex-Grundton um amt (-255..255) aufhellen/abdunkeln - fuer die
+// gesprenkelte Fels-Textur der Stalaktiten/-saeulen (drawIcicleTexture).
+// Nur einmal pro Grundton berechnet (siehe ICICLE_LIGHT/DARK), nicht pro
+// Frame.
+function shadeColor(hex, amt) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = Math.max(0, Math.min(255, (n >> 16) + amt));
+  var g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + amt));
+  var b = Math.max(0, Math.min(255, (n & 0xff) + amt));
+  return "rgb(" + r + "," + g + "," + b + ")";
+}
+var ICICLE_LIGHT = shadeColor(CAVE_ROCK, 46), ICICLE_DARK = shadeColor(CAVE_ROCK, -36);
+// Gesprenkelte Fels-Patches auf einem bereits gefuellten Dreieck (Vorlage:
+// Icon-Set mit mehrfarbigen Gesteinsflecken statt Flaechenfarbe) plus ein
+// duenner Grat als Rippenoptik. Geclippt auf dieselbe Kontur wie die
+// Fuellung, kann also nie ueber den Umriss hinausragen. o.seed haelt das
+// Fleckenmuster pro Objekt fest (dieselbe Ganzzahl-Hash-Technik wie
+// rockNoise() bei der Decke), sonst wuerde es beim Scrollen "wandern".
+function drawIcicleTexture(x, y, w, h, seed) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w / 2, y + h);
+  ctx.closePath(); ctx.clip();
+  for (var i = 0; i < 4; i++) {
+    var n1 = rockNoise(seed + i * 97), n2 = rockNoise(seed + i * 233 + 11);
+    var px = x + n1 * w, py = y + (0.15 + n2 * 0.7) * h;
+    var pr = w * (0.28 + rockNoise(seed + i * 61) * 0.22);
+    ctx.fillStyle = (i % 2 === 0) ? ICICLE_LIGHT : ICICLE_DARK;
+    ctx.globalAlpha = 0.68;
+    ctx.beginPath(); ctx.arc(px, py, pr, 0, 6.2832); ctx.fill();
+  }
+  ctx.strokeStyle = ICICLE_DARK; ctx.lineWidth = Math.max(1, w * 0.06); ctx.globalAlpha = 0.55;
+  ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
 function drawStalactite(o) {
-  G = ctx; ctx.fillStyle = theme.ground;
+  G = ctx; ctx.fillStyle = CAVE_ROCK;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
   ctx.lineTo(o.x + o.w, o.y);
   ctx.lineTo(o.x + o.w / 2, o.y + o.h);
   ctx.closePath();
   ctx.fill();
+  drawIcicleTexture(o.x, o.y, o.w, o.h, o.seed || 0);
 }
 // Tropfsteinsaeule: wie drawStalactite (der haengende Teil ist die echte
 // Kollisionsbox), plus ein rein dekorativer Stumpf vom Boden aus - zusammen
 // liest es sich wie eine fast geschlossene Saeule mit einem schmalen Spalt,
 // durch den man ducken muss. o.stubH ist nur Optik, keine eigene Kollision.
 function drawPillar(o) {
-  G = ctx; ctx.fillStyle = theme.ground;
+  G = ctx; ctx.fillStyle = CAVE_ROCK;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
   ctx.lineTo(o.x + o.w, o.y);
   ctx.lineTo(o.x + o.w / 2, o.y + o.h);
   ctx.closePath();
   ctx.fill();
+  drawIcicleTexture(o.x, o.y, o.w, o.h, o.seed || 0);
   var sx = o.x + o.w / 2;
   ctx.beginPath();
   ctx.moveTo(sx - o.w * 0.4, groundY);
@@ -1936,6 +1975,10 @@ function drawPillar(o) {
   ctx.lineTo(sx, groundY - o.stubH);
   ctx.closePath();
   ctx.fill();
+  // Kein drawIcicleTexture() hier: die Funktion nimmt eine nach unten
+  // zeigende Kontur an (Basis oben, Spitze unten), der Stumpf zeigt aber
+  // nach oben - waere falsch geclippt. Der Stumpf ist klein genug, dass
+  // die einfarbige Flaeche nicht auffaellt.
 }
 // Kristall: Bonus-Sammelobjekt, nie gefaehrlich - eigenes Array
 // (collectibles), nicht obstacles. Cluster aus mehreren spitzen Zacken

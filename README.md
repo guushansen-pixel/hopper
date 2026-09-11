@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.22" -VersionCode 25 -Force
+              -VersionName "1.23" -VersionCode 26 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -825,3 +825,41 @@ ohnehin nie das tragende Unterscheidungsmerkmal.
 Verifiziert: Screenshot mit allen drei Hindernis-Farbvarianten plus
 Sammelobjekt nebeneinander; Autopilot-Soak (18000 Frames) ohne
 Regression; kein Konsolenfehler.
+
+## Passende Fels-Textur fuer Stalaktiten/-saeulen (1.23)
+
+Rueckmeldung mit einem Icon-Set als Vorlage: mehrfarbige, gesprenkelte
+Gesteinsflecken statt einer einzelnen Flaechenfarbe.
+
+Neue Funktion `drawIcicleTexture(x, y, w, h, seed)`: mehrere
+halbtransparente helle/dunkle Kreis-Patches (`ICICLE_LIGHT`/`ICICLE_DARK`,
+per `shadeColor()` aus `CAVE_ROCK` aufgehellt/abgedunkelt) auf die
+bereits gefuellte Dreieckskontur geclippt, plus ein duenner dunkler
+Grat in der Mitte fuer die Rippenoptik der Vorlage. `drawStalactite()`
+und `drawPillar()` (der haengende Teil) rufen sie nach der Basisfuellung
+auf. Patch-Positionen haengen an einem neuen `o.seed` (bei `spawnStalactite()`/
+`spawnPillar()` gesetzt), nicht an `o.x` - sonst haette das Muster beim
+Scrollen "gewandert" statt am Objekt zu haften, dieselbe Ueberlegung wie
+bei den Decken-Speckeln (dort ist die Weltkoordinate selbst der Seed,
+hier ein gespeicherter Zufallswert, weil ein einzelner Stalaktit anders
+als die durchgehende Decke keine feste Weltposition zum Verankern hat).
+
+Nebenbei: `theme.ground` (folgt dem Tag/Nacht-Zyklus) durch `CAVE_ROCK`
+(fest, dieselbe Farbe wie Decke/Torbogen) ersetzt - Stalaktiten/-saeulen
+sind reine Hoehlen-Hindernisse, sollen also derselben "immer gleich
+dunkel"-Logik folgen wie der Rest des Gesteins (siehe 1.18).
+
+Der dekorative Boden-Stumpf der Saeule bleibt bewusst ohne Textur: die
+Funktion nimmt eine nach unten zeigende Kontur an (breite Basis oben,
+Spitze unten, wie beim haengenden Teil), der Stumpf zeigt aber nach
+oben - waere falsch geclippt worden. Bei seiner Groesse faellt die
+einfarbige Flaeche nicht auf.
+
+Verifiziert: per Screenshot bei vergroesserter Testgroesse (Textur
+deutlich sichtbar) und bei echter Spielgroesse (Textur subtil, aber
+vorhanden - dieselbe Erwartung wie bei den Decken-Speckeln, die auf
+einem richtigen Geraet mit hoeherer Aufloesung besser lesbar sind als
+in der 800px-Vorschau); sechs Autopilot-Soaks (18000 Frames) je
+2-9 Abstuerze - erhoehte Streuung, aber nicht systematisch schlechter,
+sondern dieselbe bekannte Autopilot-Grenze (prueft nur das naechste
+Hindernis) bei mehreren gleichzeitig aktiven Hoehlen-Gefahrenarten.
