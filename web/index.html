@@ -736,23 +736,27 @@ function nextMountainGap() {
 
 // ---------------------------------------------------------------- Hoehle ----
 // Zweite Stufe, ab CAVE_START dauerhaft (kein Zurueck wie bei den
-// Bergabschnitten). Eine Decke schraenkt die Sprunghoehe streckenweise ein.
+// Bergabschnitten).
 //
-// Die Grenzwerte sind aus der tatsaechlichen Kollisionsgeometrie abgeleitet,
-// nicht geraten: hits() misst die Kopfhoehe ueber dem Boden als (rh - runner.y)
-// mit rh=47 stehend/springend, rh=30 geduckt. Gemessene Kopfhoehen nach
-// Tipp-DAUER (echte Sprungphysik simuliert, nicht der isolierte kuerzeste Tipp):
-//   stehen/ducken (kein Sprung)         -> Kopfhoehe 30-47
-//   sehr kurzer Tipp (~20ms)            -> Kopfhoehe ~115
-//   normaler schneller Tipp (~60-80ms)  -> Kopfhoehe ~143-153
-//   laenger gehalten (~100ms+)          -> Kopfhoehe ~167, ab ~120ms voll 170
-// Erste Version hatte CAVE_MIN_GAP=136 - das traf schon jeden Tipp ueber
-// ~40ms, also praktisch jeden normal getimeten (nicht frame-genauen) Tipp.
-// Rueckmeldung: Höhle fuehlte sich unfair an, man stiess staendig an der
-// Decke an. Auf 158 angehoben: ein schneller Tipp bleibt jetzt zuverlaessig
-// sicher, nur wer spuerbar zu lange haelt (>=100ms) trifft an den engsten
-// Stellen. CAVE_MAX_GAP bleibt ueber dem vollen Sprung (170), offene
-// Abschnitte schraenken also weiterhin gar nichts ein.
+// Die Decke selbst war bis 1.16 toedlich (schraenkte die Sprunghoehe
+// streckenweise ein) - CAVE_MIN_GAP wurde dafuer extra aus der echten
+// Sprungphysik hergeleitet (siehe Git-Historie), fuehlte sich aber trotzdem
+// noch unfair an: die Deckenhoehe aendert sich kontinuierlich waehrend man
+// zum Sprung ansetzt, man stirbt also an einer Stelle, die beim Absprung
+// noch anders aussah. Rueckmeldung: nur noch Optik, Stalaktiten sollen die
+// echte Gefahr sein. Seit 1.17 hat die Decke deshalb *keine* Kollision mehr
+// (ceilingGapAt() bestimmt nur noch die Zeichnung von drawCeiling() und die
+// Haengeposition der Stalaktiten) - CAVE_MIN_GAP/CAVE_MAX_GAP sind reine
+// Optik-Werte fuer die Wellenform, keine Schwierigkeitsstellschrauben mehr.
+//
+// Stalaktiten sind jetzt der einzige Hoehlen-spezifische Gefahrenfaktor
+// (siehe spawnStalactite()): anders als die alte Decke ist ihre Gefahr
+// ortsfest und sichtbar, nicht an ein bewegliches Zeitfenster gekoppelt -
+// man sieht sie kommen und weiss vorher, ob man hier springen darf oder
+// nicht. STALACTITE_TIP_MAX bleibt bewusst unter der Kopfhoehe des
+// kuerzestmoeglichen Tipps (~115, siehe dortiger Kommentar), damit wirklich
+// JEDER Sprung darunter trifft - kein Entkommen durch besonders kurzes
+// Antippen.
 // Statt eines harten Schnitts bei CAVE_START: eine sichtbare Torbogen-
 // Silhouette scrollt heran, die Figur laeuft normal weiter darauf zu, dann
 // waechst eine schwarze Blende ueber das Bild - erst danach kommt
@@ -865,7 +869,10 @@ function deathBurst(x, y) {
 // den der Aufrufer statt obstacleGap() nimmt (siehe dort).
 function spawnObstacle() {
   if (state.mountainOn) { spawnRock(); return; }
-  if (state.caveOn && Math.random() < 0.22) { return spawnStalactite(); }
+  // 0.22 war bemessen, als die Decke selbst noch mittoedlich war - seit die
+  // Decke reine Optik ist (siehe Hoehle-Kommentar oben), sind Stalaktiten die
+  // einzige Hoehlen-eigene Gefahr und duerfen deutlich haeufiger kommen.
+  if (state.caveOn && Math.random() < 0.38) { return spawnStalactite(); }
   if (Math.random() < rampChance(BIRD_START, BIRD_RAMP, BIRD_TARGET)) {
     var hs = [groundY - 80, groundY - 54, groundY - 26];
     obstacles.push({ kind: "bird", x: LW + 20, y: hs[Math.floor(Math.random() * hs.length)],
@@ -887,9 +894,11 @@ function spawnObstacle() {
                    count: count, cw: cw, ch: ch, gap: gap });
 }
 
-// Stalaktit: haengt von der aktuellen Deckenwelle herab, seine Spitze bleibt
-// unter der Kopfhoehe eines kuerzesten Sprungs (siehe CAVE_MIN_GAP-Kommentar)
-// - im Stehen/Ducken immer sicher, jeder Sprung darunter trifft ihn. Danach
+// Stalaktit: haengt von der aktuellen (rein optischen) Deckenwelle herab,
+// seine Spitze bleibt unter der Kopfhoehe eines kuerzesten moeglichen Tipps
+// (~115, siehe Hoehle-Kommentar oben) - im Stehen/Ducken immer sicher, aber
+// wirklich JEDER Sprung darunter trifft ihn, ganz gleich wie kurz angetippt
+// wurde. Das ist seit 1.17 die einzige Hoehlen-eigene Gefahr, deshalb danach
 // ein grosszuegiger erzwungener Mindestabstand: eine "hier nicht springen"-
 // Zone darf nicht mit einem Ground-Hindernis ueberlappen, das einen Sprung
 // verlangt - das waere ein unloesbarer Widerspruch.
@@ -1158,16 +1167,10 @@ function update(dt) {
     if (hits(o)) { die(); return; }
   }
 
-  // Deckenkollision: erst toedlich, wenn die Decke weitgehend eingeblendet
-  // ist (0.9), sonst koennte man mitten im Einblenden an einer noch kaum
-  // sichtbaren Flaeche sterben. Dieselbe ceilingGapAt()-Funktion wie beim
-  // Zeichnen, damit sichtbare und toedliche Decke garantiert uebereinstimmen.
-  if (state.caveVis > 0.9) {
-    var rh2 = runner.ducking ? 30 : runner.h;
-    var headTop = rh2 - runner.y;
-    var gap = ceilingGapAt(scrollCeiling + RUNNER_X);
-    if (headTop > gap - 3) { die(); return; }
-  }
+  // Die Decke selbst ist seit 1.17 reine Optik, keine Kollision mehr (siehe
+  // Kommentar bei CAVE_MIN_GAP) - die echte Gefahr der Hoehle sind die
+  // Stalaktiten, die ueber die normale hits()-Pruefung im Obstacle-Loop oben
+  // sterben lassen.
 }
 
 function hits(o) {

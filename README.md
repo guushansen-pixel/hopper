@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.16" -VersionCode 19 -Force
+              -VersionName "1.17" -VersionCode 20 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -556,3 +556,37 @@ und behoben: `.level .lock { display:flex }` hatte hoehere Spezifitaet
 als die UA-Default-Regel fuer `[hidden]` und ueberstimmte sie, das
 Schloss blieb nach Freischaltung sichtbar - behoben mit einer
 expliziten `.level .lock[hidden] { display:none }`-Regel.
+
+## Decke ist reine Optik, Stalaktiten sind die echte Gefahr (1.17)
+
+Rueckmeldung nach 1.16: die Deckenhoehe trotz hoeherem `CAVE_MIN_GAP`
+immer noch schwierig. Grundproblem war nicht mehr die Zahl, sondern das
+Prinzip: die Deckenhoehe aendert sich kontinuierlich waehrend man zum
+Sprung ansetzt (Sinuswelle, kein fester Wert), man stirbt also an einer
+Stelle, die im Moment des Absprungs noch anders aussah - ein bewegliches
+Zeitfenster statt einer sichtbaren, vorhersehbaren Gefahr. Entscheidung:
+die Decke wird komplett unschaedlich, nur noch Kulisse.
+
+Die eigene Deckenkollision in `update()` (der `state.caveVis > 0.9`-Block)
+ist ersatzlos entfernt. `ceilingGapAt()` bestimmt weiterhin die Zeichnung
+(`drawCeiling()`) und die Haengeposition der Stalaktiten, hat aber keine
+Kollisionsbedeutung mehr - `CAVE_MIN_GAP`/`CAVE_MAX_GAP` sind jetzt reine
+Optik-Werte.
+
+Stalaktiten uebernehmen die komplette Hoehlen-eigene Gefahr: anders als
+die alte Decke sind sie ortsfest und sichtbar, bevor man zum Sprung
+ansetzt - man sieht sie kommen, keine Ueberraschung durch ein
+Zeitfenster, das sich waehrend des Sprungs weiterbewegt. Spawn-Chance
+von 0.22 auf 0.38 angehoben (frueher war die Decke selbst schon die
+Hauptgefahr, jetzt tragen die Stalaktiten das allein). `STALACTITE_TIP_MAX`
+bleibt bei 105, bewusst unter der Kopfhoehe des kuerzestmoeglichen Tipps
+(~115) - jeder Sprung darunter ist weiterhin garantiert toedlich, kein
+Entkommen durch besonders kurzes Antippen.
+
+Verifiziert: voller Sprung unter der engsten Deckenstelle ohne
+Stalaktiten bleibt am Leben (vorher toedlich); ein Stalaktit toetet
+weiterhin bei jedem Sprung darunter, auch beim kuerzestmoeglichen Tipp;
+Stehen/Ducken unter einem Stalaktiten bleibt sicher; Autopilot-Soak
+(20000 Frames, durchgehend `caveOn`, hoehere Stalaktiten-Dichte) zeigt
+mit 2 Abstuerzen in 5,6 simulierten Minuten keine Verschlechterung
+gegenueber vorher.
