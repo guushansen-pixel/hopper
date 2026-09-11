@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.19" -VersionCode 22 -Force
+              -VersionName "1.20" -VersionCode 23 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -743,3 +743,29 @@ automatische Wueste-zu-Hoehle-Umschaltung ab Score 2000 einsetzt -
 das ist keine neue Aenderung, sondern dieselbe seit 1.12 bestehende
 Vorfuehrmodus-Kulisse); kein Konsolenfehler ueber rund 183000
 `update()`-Aufrufe in Summe.
+
+## Kristall-Skin: Zacken-Cluster statt flacher Raute (1.20)
+
+Vorlage: ein Foto eines echten blauen Kristallstocks (mehrere spitze
+Zacken unterschiedlicher Hoehe von einer gemeinsamen Basis aus, jede
+Flaeche mit hellerer Kante fuer den Glas-Eindruck). `drawCrystal()`
+zeichnet jetzt so einen Cluster statt der bisherigen einzelnen flachen
+Raute: pro Zacke zwei Formen uebereinander (dunklerer Koerper `#2f9fc9`
++ helle Facette `#d8f7fb`), dazu eine kleine dunkle Ellipse als
+Fels-Basis. Drei Cluster-Layouts (`CRYSTAL_VARIANTS`, 2-4 Zacken je
+Variante) fuer sichtbare Abwechslung, dieselbe Idee wie die drei
+`drawRock()`-Varianten. `variant` wird beim Spawnen zufaellig gewaehlt
+und im Objekt gespeichert (wie bei Felsen). Kollisionsbox minimal
+vergroessert (14x16 -> 20x24) fuer den breiteren Cluster-Umriss - reine
+Optik-Anpassung, Aufnahme bleibt wie zuvor "einfach durchlaufen reicht".
+
+Nebenbei einen Dokumentationsfehler behoben: der Kommentar bei
+`state.crystalIn` nannte noch "236" Funde aus einem fruehen,
+ungetesteten Kommentarentwurf - der tatsaechlich gemessene Wert war
+335 (siehe 1.19). Zahl im Code-Kommentar korrigiert, README war
+bereits korrekt.
+
+Verifiziert: alle drei Varianten nebeneinander gerendert und per
+Screenshot geprueft; Aufnahme per direktem `update()`-Aufruf weiterhin
+korrekt (Bonus +25, Objekt entfernt, kein Tod); Autopilot-Soak (18000
+Frames) ohne Regression.

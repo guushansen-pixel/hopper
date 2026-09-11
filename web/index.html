@@ -1231,14 +1231,17 @@ function update(dt) {
       // immer noch zu dicht - der Weltabstand ist fix, aber state.speed
       // waechst uebers Spiel, dieselbe Distanz kommt also in echter Zeit
       // immer schneller wieder (siehe nextMountainGap() fuer dasselbe
-      // Problem bei den Bergabschnitten). 1800-3000 spawnte 236 in 20
+      // Problem bei den Bergabschnitten). 1800-3000 spawnte 335 in 20
       // Minuten (~alle 3,6s) - fuehlt sich nach einem echten Fund an, nicht
       // nach einem Dauerzustand.
       state.crystalIn = 1800 + Math.random() * 1200;
       // Immer auf dem Boden, nie in Sprunghoehe - ein Bonus darf nie eine
       // Verzicht-oder-Risiko-Entscheidung erzwingen, einfach durchlaufen
-      // reicht.
-      collectibles.push({ x: LW + 20, y: groundY - 22, w: 14, h: 16 });
+      // reicht. variant waehlt eine von drei Cluster-Formen (siehe
+      // CRYSTAL_VARIANTS bei drawCrystal), fuer sichtbare Abwechslung wie
+      // bei drawRock().
+      collectibles.push({ x: LW + 20, y: groundY - 24, w: 20, h: 24,
+                           variant: Math.floor(Math.random() * 3) });
     }
     // Wassertropfen: reine Deko-Partikel von der Decke, reuses particles[]
     // (siehe drawParticles "drip"-Fall). Bildschirm-x statt Weltkoordinate,
@@ -1934,21 +1937,52 @@ function drawPillar(o) {
   ctx.fill();
 }
 // Kristall: Bonus-Sammelobjekt, nie gefaehrlich - eigenes Array
-// (collectibles), nicht obstacles. Leichtes Pulsieren ueber state.time statt
-// eines Sprite-Wechsels.
+// (collectibles), nicht obstacles. Cluster aus mehreren spitzen Zacken
+// unterschiedlicher Hoehe von einer gemeinsamen Basis aus (Vorlage: echtes
+// Foto eines blauen Kristallstocks) - jeder Zacken zweifarbig (dunklerer
+// Koerper + helle Facette) fuer einen Glas-Eindruck. Drei Cluster-Formen
+// (CRYSTAL_VARIANTS) fuer sichtbare Abwechslung, wie bei drawRock().
+var CRYSTAL_VARIANTS = [
+  [ { dx: -0.32, h: 0.62, w: 0.34, tilt: -0.12 },
+    { dx: 0.05, h: 1.00, w: 0.42, tilt: 0 },
+    { dx: 0.38, h: 0.55, w: 0.30, tilt: 0.14 } ],
+  [ { dx: -0.18, h: 0.90, w: 0.42, tilt: -0.07 },
+    { dx: 0.30, h: 0.60, w: 0.32, tilt: 0.18 } ],
+  [ { dx: -0.32, h: 0.50, w: 0.28, tilt: -0.20 },
+    { dx: -0.02, h: 0.85, w: 0.38, tilt: 0.03 },
+    { dx: 0.32, h: 0.65, w: 0.30, tilt: 0.16 },
+    { dx: -0.08, h: 0.34, w: 0.20, tilt: -0.32 } ]
+];
+function drawCrystalSpike(dx, h, w, tilt) {
+  ctx.save();
+  ctx.translate(dx, 0); ctx.rotate(tilt);
+  ctx.fillStyle = "#2f9fc9";
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, 0); ctx.lineTo(-w / 2, -h * 0.16); ctx.lineTo(0, -h);
+  ctx.lineTo(w / 2, -h * 0.16); ctx.lineTo(w / 2, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#d8f7fb";
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.05, -h * 0.18); ctx.lineTo(0, -h); ctx.lineTo(w * 0.20, -h * 0.20); ctx.lineTo(w * 0.03, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
 function drawCrystal(o) {
   G = ctx;
-  var cx = o.x + o.w / 2, cy = o.y + o.h / 2;
-  var pulse = 0.85 + 0.15 * Math.sin(state.time * 4 + o.x * 0.05);
+  var cx = o.x + o.w / 2, cy = o.y + o.h;
+  var pulse = 0.92 + 0.08 * Math.sin(state.time * 4 + o.x * 0.05);
   ctx.save();
   ctx.translate(cx, cy); ctx.scale(pulse, pulse);
-  ctx.fillStyle = "#7fd8e8"; ctx.globalAlpha = 0.35;
-  ctx.beginPath(); ctx.arc(0, 0, o.w * 0.9, 0, 6.2832); ctx.fill();
-  ctx.globalAlpha = 1; ctx.fillStyle = "#bdf3fb";
-  ctx.beginPath();
-  ctx.moveTo(0, -o.h * 0.55); ctx.lineTo(o.w * 0.4, 0);
-  ctx.lineTo(0, o.h * 0.55); ctx.lineTo(-o.w * 0.4, 0);
-  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#7fd8e8"; ctx.globalAlpha = 0.28;
+  ctx.beginPath(); ctx.arc(0, -o.h * 0.4, o.w * 0.95, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#3a6470";
+  ctx.beginPath(); ctx.ellipse(0, 0, o.w * 0.52, o.h * 0.12, 0, 0, 6.2832); ctx.fill();
+  var spikes = CRYSTAL_VARIANTS[o.variant || 0];
+  for (var i = 0; i < spikes.length; i++) {
+    var s = spikes[i];
+    drawCrystalSpike(s.dx * o.w, s.h * o.h, s.w * o.w, s.tilt);
+  }
   ctx.restore();
 }
 function drawSnake(o) {
