@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.24" -VersionCode 27 -Force
+              -VersionName "1.25" -VersionCode 28 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -905,3 +905,51 @@ Formationen, keine neue Regression); volle Autopilot-Soaks (6x 18000
 Frames, danach 1x 36000 Frames) zurueck im Basiswert 1-4 Abstuerze;
 kein Konsolenfehler; Screenshot mit Einzeltier und Dreiergruppe in
 unterschiedlichen Flap-Phasen.
+
+## Voegel aufgewertet + Level 1 zeigt ein kleineres, aber laengeres Ziel (1.25)
+
+**Voegel.** Eigene Anatomie statt Fledermaus-Kopie: `drawBirdWing()`
+staffelt drei Schwingen abnehmender Laenge/Deckkraft (Handschwingen
+vorn, kuerzere Armschwingen dahinter, wie echtes Vogelgefieder) und
+rotiert sie gemeinsam um die Schulter statt zwischen zwei Posen zu
+springen - dieselbe Kontinuierlich-Winkel-Idee wie bei der Fledermaus
+(1.24), aber Federn statt Lederfinger. Dazu ein spitzer Dreiecks-
+Schnabel statt des alten Rechtecks und zwei kleine Schwanzfedern hinten.
+Bewusst *keine* aktive Flugbewegung (kein `diveExtra`/Ansteuern des
+Spielers wie bei Fledermaeuse) - nicht angefragt, und nach dem
+Fledermaus-Kollisionsbug (siehe 1.24) ein guter Grund, hier nicht ohne
+Anlass dasselbe Risiko einzugehen. Rein optisch, Spawn/Kollision
+unveraendert.
+
+**Level-1-Ziel.** Rueckmeldung: der angezeigte Zielwert sollte kleiner
+wirken (1000 statt 2000), Level 1 soll aber laenger dauern - "so lange
+wie es vorher bis 3000 gedauert haette". Zwei Groessen, die bisher
+identisch waren (der interne Rohwert fuer alle Schwierigkeits-Trigger
+UND die angezeigte Zahl), mussten dafuer entkoppelt werden:
+
+- `CAVE_START` 2000 -> 3000 (weiterhin derselbe Rohwert, derselbe
+  `state.score`, dieselbe Formel `distance/14` - Level 1 dauert dadurch
+  laenger, ca. Faktor 1.3-1.4 in echten Frames gemessen, nicht linear
+  zur Score-Erhoehung wegen der Tempo-Rampe am Anfang).
+- Neue Funktion `dispScore(raw)` (= `Math.floor(raw/3)`), die NUR an
+  den fuer den Spieler sichtbaren Stellen greift: HUD (`drawHud()`,
+  nur wenn `!state.caveOn`), Pause-Screen, Game-Over/Levelabschluss-
+  Bildschirm (`showGameOver()`/`showLevelComplete()`) und die Lobby
+  (`refreshMenu()`, nur im Wueste-Zweig). `state.score`/`state.high`
+  selbst bleiben unveraendert (Rohwert) - jede interne Schwierigkeits-
+  Logik (`BIRD_START`, `SNAKE_START`, Bergabschnitte, Nachtzyklus) haengt
+  exakt an dieser Rohgroesse und blieb dadurch **absichtlich** zeitlich
+  komplett unangetastet, obwohl sie nicht angefragt war. Level 2 (Hoehle)
+  zeigt weiterhin den echten Rohwert - dort wurde nichts geaendert,
+  `state.caveOn` gated jede `dispScore()`-Anwendung.
+- Persistierte Highscores (`HIGH_KEY`/`LAST_KEY`) speichern weiterhin
+  den Rohwert, `dispScore()` wird erst beim Anzeigen angewendet - kein
+  Migrations-/Formatwechsel fuer bestehende Speicherstaende noetig.
+
+Verifiziert: Simulation von Score 0 bis zum Levelabschluss zeigt
+`dispScore(3000)===1000` und der tatsaechliche Levelabschluss-Bildschirm
+(`oScore`/`oHigh`) exakt diesen Wert; HUD-Screenshots in Level 1 (skaliert,
+z.B. "00500"/"HI 01000") und Level 2 (unskaliert, "HI 05000") direkt
+gegenuebergestellt; Autopilot-Soaks fuer Level 1 (4x, bis zu 2,5 Minuten
+oder Hoehlen-Uebergang) mit 0 Abstuerzen, keine Regression durch die
+neue Vogel-Zeichnung.

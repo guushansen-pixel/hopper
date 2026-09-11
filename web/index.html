@@ -775,7 +775,22 @@ function nextMountainGap() {
 var ENTER_DURATION = 1.3;
 var ENTER_ARCH_OFFSET = 460;
 
-var CAVE_START = 2000;
+// Rueckmeldung: der angezeigte Zielwert (2000) sollte kleiner wirken
+// (1000), Level 1 aber trotzdem laenger dauern - "so lange wie es vorher
+// bis 3000 gedauert haette". CAVE_START bleibt deshalb der interne,
+// unveraenderte Rohwert (jetzt 3000 statt 2000, also 1.5x so lange wie
+// vorher bei derselben Formel/demselben Speed-Ramp) - Voegel/Schlangen/
+// Berge/Nachtzyklus haengen an genau dieser Rohgroesse und bleiben dadurch
+// zeitlich unangetastet, nur der Level 1 komplett unabhaengig davon eine
+// laengere Runde. LVL1_SCORE_DIV teilt NUR die fuer den Spieler sichtbaren
+// Zahlen (HUD, Levelabschluss-/Game-Over-Bildschirm, Lobby-Bestwert) durch
+// 3, damit am Ziel "1000" steht statt "3000" - state.score selbst (und
+// damit jede interne Schwierigkeitslogik sowie Level 2/die Hoehle, die
+// nicht angefragt war) bleibt unangetastet. dispScore() ist die einzige
+// Stelle, die diese Teilung vornimmt.
+var CAVE_START = 3000;
+var LVL1_SCORE_DIV = 3;
+function dispScore(raw) { return Math.floor(raw / LVL1_SCORE_DIV); }
 var CAVE_MIN_GAP = 158, CAVE_MAX_GAP = 210, CAVE_WAVELEN = 3200;
 var scrollCeiling = 0;
 
@@ -1706,14 +1721,39 @@ function drawCactus(o) {
     rr(x + o.cw + 1, y + h * 0.22, 5, h * 0.32, 2.5);
   }
 }
+// Gefiederter Fluegel statt einer einzelnen Rechteckflaeche: drei
+// gestaffelte "Schwingen" (abnehmende Laenge/Deckkraft nach hinten, wie
+// echte Handschwingen), die zusammen um die Schulter rotieren statt nur
+// zwischen zwei Posen hoch/runter zu springen - dieselbe Kontinuierlich-
+// Winkel-Idee wie bei der Fledermaus, aber bewusst andere Anatomie
+// (Federn statt Lederfingern), damit Vogel und Fledermaus trotz gleicher
+// Technik nicht wie dasselbe Tier in zwei Farben wirken.
+function drawBirdWing(bx, by, flapAngle) {
+  ctx.save();
+  ctx.translate(bx, by); ctx.rotate(flapAngle);
+  ctx.globalAlpha = 1;    rr(-3, -3, 19, 7, 3.5);
+  ctx.globalAlpha = 0.85; rr(-4, 2, 15, 6, 3);
+  ctx.globalAlpha = 0.65; rr(-4, 6, 11, 5, 2.5);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
 function drawBird(o) {
   G = ctx; ctx.fillStyle = theme.ground;
-  var up = Math.floor(o.flap) % 2 === 0;
+  var flapAngle = Math.sin(o.flap) * 0.9 - 0.15;
   rr(o.x + 8, o.y + 10, 24, 9, 4.5);
   rr(o.x + 28, o.y + 6, 11, 10, 4);
-  rr(o.x + 37, o.y + 10, 6, 4, 2);
-  if (up) { rr(o.x + 9, o.y - 3, 19, 9, 4.5); }
-  else    { rr(o.x + 9, o.y + 16, 19, 9, 4.5); }
+  // Schnabel: spitzes Dreieck statt Rechteck.
+  ctx.beginPath();
+  ctx.moveTo(o.x + 37, o.y + 9); ctx.lineTo(o.x + 44, o.y + 11); ctx.lineTo(o.x + 37, o.y + 14);
+  ctx.closePath(); ctx.fill();
+  // Schwanz: zwei kleine gefaecherte Federn hinten.
+  ctx.beginPath();
+  ctx.moveTo(o.x + 7, o.y + 12); ctx.lineTo(o.x - 5, o.y + 7); ctx.lineTo(o.x + 3, o.y + 14);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(o.x + 7, o.y + 15); ctx.lineTo(o.x - 5, o.y + 19); ctx.lineTo(o.x + 3, o.y + 16);
+  ctx.closePath(); ctx.fill();
+  drawBirdWing(o.x + 9, o.y + 13, flapAngle);
 }
 // Fluegel mit drei "Fingern" (Vorlage: echte Fledermaus-Anatomie - eine
 // Membran zwischen gespreizten Handknochen statt einer glatten Feder-
@@ -2169,14 +2209,18 @@ function drawHud() {
   ctx.font = "600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
   ctx.textAlign = "right"; ctx.textBaseline = "top";
   var right = LW - 18;
+  // dispScore() nur in Level 1 (siehe CAVE_START-Kommentar) - Level 2 zeigt
+  // weiterhin den echten state.score.
+  var hi = state.caveOn ? state.high : dispScore(state.high);
+  var sc = state.caveOn ? state.score : dispScore(state.score);
   if (state.high > 0) {
     ctx.fillStyle = theme.soft;
-    ctx.fillText("HI " + pad5(state.high), right - 78, 18);
+    ctx.fillText("HI " + pad5(hi), right - 78, 18);
   }
   var show = state.flash > 0 ? (Math.floor(state.flash * 9) % 2 === 0) : true;
   if (show) {
     ctx.fillStyle = (state.flash > 0) ? theme.accent : theme.ink;
-    ctx.fillText(pad5(state.score), right, 18);
+    ctx.fillText(pad5(sc), right, 18);
   }
 }
 
@@ -2325,8 +2369,10 @@ function refreshMenu() {
   // Zeigt den Highscore des gerade gewaehlten Levels, nicht immer Level 1 -
   // sonst wirkt der Wert nach dem Umschalten auf Level 2 falsch/veraltet.
   var caveMode = settings.startCave && caveUnlocked;
-  document.getElementById("mHigh").textContent = pad5(readNum(caveMode ? CAVE_HIGH_KEY : HIGH_KEY));
-  document.getElementById("mLast").textContent = pad5(readNum(caveMode ? CAVE_LAST_KEY : LAST_KEY));
+  var mHigh = readNum(caveMode ? CAVE_HIGH_KEY : HIGH_KEY);
+  var mLast = readNum(caveMode ? CAVE_LAST_KEY : LAST_KEY);
+  document.getElementById("mHigh").textContent = pad5(caveMode ? mHigh : dispScore(mHigh));
+  document.getElementById("mLast").textContent = pad5(caveMode ? mLast : dispScore(mLast));
   elLvlDesert.setAttribute("aria-pressed", caveMode ? "false" : "true");
   elLvlCave.setAttribute("aria-pressed", caveMode ? "true" : "false");
   elLvlCave.classList.toggle("locked", !caveUnlocked);
@@ -2348,14 +2394,14 @@ function startGame() {
 }
 function pauseGame() {
   if (screen !== "game" || state.phase !== "running") { return; }
-  document.getElementById("pScore").textContent = pad5(state.score);
-  document.getElementById("pHigh").textContent = pad5(state.high);
+  document.getElementById("pScore").textContent = pad5(state.caveOn ? state.score : dispScore(state.score));
+  document.getElementById("pHigh").textContent = pad5(state.caveOn ? state.high : dispScore(state.high));
   show("paused"); SFX.ui();
 }
 function resumeGame() { show("game"); lastTime = 0; SFX.ui(); }
 function showGameOver(record) {
-  document.getElementById("oScore").textContent = pad5(state.score);
-  document.getElementById("oHigh").textContent = pad5(state.high);
+  document.getElementById("oScore").textContent = pad5(state.caveOn ? state.score : dispScore(state.score));
+  document.getElementById("oHigh").textContent = pad5(state.caveOn ? state.high : dispScore(state.high));
   document.getElementById("overTitle").textContent = record ? "Bestwert!" : "Vorbei";
   document.getElementById("overTag").innerHTML = record ? "Neuer persoenlicher Rekord" : "&nbsp;";
   document.getElementById("btnAgain").textContent = "Nochmal";
@@ -2364,9 +2410,10 @@ function showGameOver(record) {
 // Level 1 (Wueste) endet erfolgreich statt durch Sterben - eigener Text und
 // eigener Primary-Button auf demselben Overlay wie showGameOver(), damit
 // nicht ein zweites, fast identisches Overlay gepflegt werden muss.
+// Immer Level 1 (siehe completeLevel()), dispScore() also unbedingt.
 function showLevelComplete() {
-  document.getElementById("oScore").textContent = pad5(state.score);
-  document.getElementById("oHigh").textContent = pad5(state.high);
+  document.getElementById("oScore").textContent = pad5(dispScore(state.score));
+  document.getElementById("oHigh").textContent = pad5(dispScore(state.high));
   document.getElementById("overTitle").textContent = "Level 1 geschafft!";
   document.getElementById("overTag").innerHTML = "Hoehle freigeschaltet";
   document.getElementById("btnAgain").textContent = "Level 2 spielen";
