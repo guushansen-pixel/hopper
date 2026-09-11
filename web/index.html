@@ -350,7 +350,7 @@
   <div class="panel">
     <div class="title" style="font-size:27px">Pause</div>
     <div class="scores">
-      <div><span>Punkte</span><b id="pScore">00000</b></div>
+      <div><span id="pScoreLabel">Punkte</span><b id="pScore">00000</b></div>
       <div><span>Bestwert</span><b id="pHigh">00000</b></div>
     </div>
     <button class="primary" id="btnResume">Weiter</button>
@@ -365,7 +365,7 @@
     <div class="title" style="font-size:27px" id="overTitle">Vorbei</div>
     <div class="tag" id="overTag">&nbsp;</div>
     <div class="scores">
-      <div><span>Punkte</span><b id="oScore">00000</b></div>
+      <div><span id="oScoreLabel">Punkte</span><b id="oScore">00000</b></div>
       <div><span>Bestwert</span><b id="oHigh">00000</b></div>
     </div>
     <button class="primary" id="btnAgain">Nochmal</button>
@@ -775,22 +775,26 @@ function nextMountainGap() {
 var ENTER_DURATION = 1.3;
 var ENTER_ARCH_OFFSET = 460;
 
-// Rueckmeldung: der angezeigte Zielwert (2000) sollte kleiner wirken
-// (1000), Level 1 aber trotzdem laenger dauern - "so lange wie es vorher
-// bis 3000 gedauert haette". CAVE_START bleibt deshalb der interne,
-// unveraenderte Rohwert (jetzt 3000 statt 2000, also 1.5x so lange wie
-// vorher bei derselben Formel/demselben Speed-Ramp) - Voegel/Schlangen/
-// Berge/Nachtzyklus haengen an genau dieser Rohgroesse und bleiben dadurch
-// zeitlich unangetastet, nur der Level 1 komplett unabhaengig davon eine
-// laengere Runde. LVL1_SCORE_DIV teilt NUR die fuer den Spieler sichtbaren
-// Zahlen (HUD, Levelabschluss-/Game-Over-Bildschirm, Lobby-Bestwert) durch
-// 3, damit am Ziel "1000" steht statt "3000" - state.score selbst (und
-// damit jede interne Schwierigkeitslogik sowie Level 2/die Hoehle, die
-// nicht angefragt war) bleibt unangetastet. dispScore() ist die einzige
-// Stelle, die diese Teilung vornimmt.
+// CAVE_START ist der interne Rohwert (unveraendert seit 1.25, siehe
+// Git-Historie) - Voegel/Schlangen/Berge/Nachtzyklus haengen an genau
+// dieser Rohgroesse und bleiben dadurch zeitlich unangetastet, egal was
+// dem Spieler angezeigt wird.
+//
+// Anzeige in Level 1 seit 1.27: Prozent-Fortschritt statt einer
+// Punktzahl, wie in Geometry Dash ("wie weit bin ich?" statt "wie viele
+// Punkte habe ich?"). pctScore() ist reiner Anzeige-Code (state.score
+// selbst bleibt der Rohwert), fmtScore() waehlt daraus je nach Level das
+// richtige Format: Level 1 "NN%" (pctScore, gedeckelt bei 100 - der
+// exakte Trigger-Frame kann state.score minimal ueber CAVE_START
+// schieben), Level 2 weiterhin die klassische fuenfstellige Punktzahl
+// (pad5) - dort gibt es kein definiertes Ziel, ein Prozentwert ergaebe
+// keinen Sinn. Ersetzt die reine Skalierung aus 1.25 (dispScore(),
+// "3000 Rohpunkte -> Anzeige 1000") vollstaendig, damit nicht zwei
+// verschiedene Zahlensysteme (skalierte Punktzahl UND Prozent) fuer
+// dieselbe Sache nebeneinander existieren.
 var CAVE_START = 3000;
-var LVL1_SCORE_DIV = 3;
-function dispScore(raw) { return Math.floor(raw / LVL1_SCORE_DIV); }
+function pctScore(raw) { return Math.min(100, Math.floor(raw / CAVE_START * 100)); }
+function fmtScore(raw, caveOn) { return caveOn ? pad5(raw) : (pctScore(raw) + "%"); }
 var CAVE_MIN_GAP = 158, CAVE_MAX_GAP = 210, CAVE_WAVELEN = 3200;
 var scrollCeiling = 0;
 
@@ -2211,18 +2215,14 @@ function drawHud() {
   ctx.font = "600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
   ctx.textAlign = "right"; ctx.textBaseline = "top";
   var right = LW - 18;
-  // dispScore() nur in Level 1 (siehe CAVE_START-Kommentar) - Level 2 zeigt
-  // weiterhin den echten state.score.
-  var hi = state.caveOn ? state.high : dispScore(state.high);
-  var sc = state.caveOn ? state.score : dispScore(state.score);
   if (state.high > 0) {
     ctx.fillStyle = theme.soft;
-    ctx.fillText("HI " + pad5(hi), right - 78, 18);
+    ctx.fillText("HI " + fmtScore(state.high, state.caveOn), right - 78, 18);
   }
   var show = state.flash > 0 ? (Math.floor(state.flash * 9) % 2 === 0) : true;
   if (show) {
     ctx.fillStyle = (state.flash > 0) ? theme.accent : theme.ink;
-    ctx.fillText(pad5(sc), right, 18);
+    ctx.fillText(fmtScore(state.score, state.caveOn), right, 18);
   }
 }
 
@@ -2373,8 +2373,8 @@ function refreshMenu() {
   var caveMode = settings.startCave && caveUnlocked;
   var mHigh = readNum(caveMode ? CAVE_HIGH_KEY : HIGH_KEY);
   var mLast = readNum(caveMode ? CAVE_LAST_KEY : LAST_KEY);
-  document.getElementById("mHigh").textContent = pad5(caveMode ? mHigh : dispScore(mHigh));
-  document.getElementById("mLast").textContent = pad5(caveMode ? mLast : dispScore(mLast));
+  document.getElementById("mHigh").textContent = fmtScore(mHigh, caveMode);
+  document.getElementById("mLast").textContent = fmtScore(mLast, caveMode);
   elLvlDesert.setAttribute("aria-pressed", caveMode ? "false" : "true");
   elLvlCave.setAttribute("aria-pressed", caveMode ? "true" : "false");
   elLvlCave.classList.toggle("locked", !caveUnlocked);
@@ -2396,14 +2396,16 @@ function startGame() {
 }
 function pauseGame() {
   if (screen !== "game" || state.phase !== "running") { return; }
-  document.getElementById("pScore").textContent = pad5(state.caveOn ? state.score : dispScore(state.score));
-  document.getElementById("pHigh").textContent = pad5(state.caveOn ? state.high : dispScore(state.high));
+  document.getElementById("pScoreLabel").textContent = state.caveOn ? "Punkte" : "Fortschritt";
+  document.getElementById("pScore").textContent = fmtScore(state.score, state.caveOn);
+  document.getElementById("pHigh").textContent = fmtScore(state.high, state.caveOn);
   show("paused"); SFX.ui();
 }
 function resumeGame() { show("game"); lastTime = 0; SFX.ui(); }
 function showGameOver(record) {
-  document.getElementById("oScore").textContent = pad5(state.caveOn ? state.score : dispScore(state.score));
-  document.getElementById("oHigh").textContent = pad5(state.caveOn ? state.high : dispScore(state.high));
+  document.getElementById("oScoreLabel").textContent = state.caveOn ? "Punkte" : "Fortschritt";
+  document.getElementById("oScore").textContent = fmtScore(state.score, state.caveOn);
+  document.getElementById("oHigh").textContent = fmtScore(state.high, state.caveOn);
   document.getElementById("overTitle").textContent = record ? "Bestwert!" : "Vorbei";
   document.getElementById("overTag").innerHTML = record ? "Neuer persoenlicher Rekord" : "&nbsp;";
   document.getElementById("btnAgain").textContent = "Nochmal";
@@ -2412,10 +2414,12 @@ function showGameOver(record) {
 // Level 1 (Wueste) endet erfolgreich statt durch Sterben - eigener Text und
 // eigener Primary-Button auf demselben Overlay wie showGameOver(), damit
 // nicht ein zweites, fast identisches Overlay gepflegt werden muss.
-// Immer Level 1 (siehe completeLevel()), dispScore() also unbedingt.
+// Immer Level 1 (siehe completeLevel()), also immer die Prozent-Anzeige -
+// hier faellt sie planmaessig auf 100% (siehe pctScore()-Deckelung).
 function showLevelComplete() {
-  document.getElementById("oScore").textContent = pad5(dispScore(state.score));
-  document.getElementById("oHigh").textContent = pad5(dispScore(state.high));
+  document.getElementById("oScoreLabel").textContent = "Fortschritt";
+  document.getElementById("oScore").textContent = fmtScore(state.score, false);
+  document.getElementById("oHigh").textContent = fmtScore(state.high, false);
   document.getElementById("overTitle").textContent = "Level 1 geschafft!";
   document.getElementById("overTag").innerHTML = "Hoehle freigeschaltet";
   document.getElementById("btnAgain").textContent = "Level 2 spielen";

@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.26" -VersionCode 29 -Force
+              -VersionName "1.27" -VersionCode 30 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -973,3 +973,32 @@ Rechts-Asymmetrie, die falsch herum sitzen koennte.
 Verifiziert: Screenshot mit drei Voegeln in unterschiedlichen Flap-
 Phasen - Schnabel zeigt jetzt in Bewegungsrichtung; Autopilot-Soak
 (9000 Frames) weiterhin 0 Abstuerze; kein Konsolenfehler.
+
+## Level 1: Prozent-Fortschritt statt Punktzahl (1.27)
+
+Wunsch: "ein Counting System % so wie in Geometry Dash" statt der
+1.25-Skalierung (Rohpunkte/3, Ziel zeigte "1000").
+
+`pctScore(raw)` ersetzt `dispScore()` vollstaendig -
+`Math.min(100, Math.floor(raw / CAVE_START * 100))` statt einer festen
+Division. Neue Helper-Funktion `fmtScore(raw, caveOn)` buendelt die
+Formatwahl an allen fuenf Anzeige-Stellen (HUD, Pause, Game-Over,
+Levelabschluss, Lobby): Level 1 "NN%", Level 2 weiterhin `pad5()` - in
+der endlosen Hoehle gibt es kein definiertes Ziel, ein Prozentwert
+ergaebe keinen Sinn. `state.score`/`state.high` bleiben unveraendert
+Rohwerte, genau wie in 1.25 - nur die Formatierung an der Anzeige
+aendert sich.
+
+Das "Punkte"-Label auf dem Pause- und dem Game-Over-Bildschirm wechselt
+jetzt dynamisch zu "Fortschritt", wenn ein Prozentwert statt einer
+Punktzahl angezeigt wird (`pScoreLabel`/`oScoreLabel`, neue IDs) - "Punkte:
+74%" waere sonst eine falsche Bezeichnung fuer das, was da eigentlich
+steht. Der Levelabschluss-Bildschirm zeigt planmaessig immer "100%"
+(die `pctScore()`-Deckelung faengt ab, dass `state.score` im exakten
+Trigger-Frame minimal ueber `CAVE_START` liegen kann).
+
+Verifiziert: HUD/Pause/Levelabschluss/Lobby je per direktem
+Funktionsaufruf und Screenshot geprueft (u.a. "HI 100%"/"50%" waehrend
+des Laufs, "Fortschritt: 100%" beim echten Levelabschluss ueber
+Autopilot-Steuerung, Level 2 weiterhin unveraendert "04500"/"05000");
+Autopilot-Soak (9000 Frames) ohne Regression; kein Konsolenfehler.
