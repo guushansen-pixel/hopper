@@ -897,7 +897,8 @@ function spawnObstacle() {
     var swarm = (state.caveOn && Math.random() < 0.30) ? 2 + Math.floor(Math.random() * 2) : 1;
     for (var b = 0; b < swarm; b++) {
       obstacles.push({ kind: state.caveOn ? "bat" : "bird", x: LW + 20 + b * 46,
-                       y: baseY, w: 38, h: 26, flap: Math.random() * 6 });
+                       y: baseY, baseY: baseY, w: 38, h: 26, flap: Math.random() * 6,
+                       bobT: Math.random() * 6, diveExtra: 0 });
     }
     return;
   }
@@ -996,11 +997,13 @@ function autoPilot() {
   for (var i = 0; i < obstacles.length; i++) {
     var o = obstacles[i];
     if (o.x + o.w < RUNNER_X) { continue; }
-    // Felsen sind schneller unterwegs als state.speed allein (rollExtra) -
-    // ohne das hier einzurechnen, timt der Autopilot systematisch zu spaet
-    // und stolperte in dichten Felsabschnitten wiederholt (127 von 135
-    // Abstuerzen in 10 Minuten bei zu enger Taktung, siehe README).
-    var closingSpeed = state.speed + (o.kind === "rock" ? o.rollExtra : 0);
+    // Felsen (rollExtra) und Fledermaeuse (diveExtra) sind schneller
+    // unterwegs als state.speed allein - ohne das hier einzurechnen, timt
+    // der Autopilot systematisch zu spaet und stolperte in dichten
+    // Felsabschnitten wiederholt (127 von 135 Abstuerzen in 10 Minuten bei
+    // zu enger Taktung, siehe README).
+    var closingSpeed = state.speed + (o.kind === "rock" ? o.rollExtra : 0) +
+                        (o.kind === "bat" ? o.diveExtra : 0);
     var tContact = (o.x - (RUNNER_X + 46)) / closingSpeed;
     var tPass    = (o.w + 50) / closingSpeed;
     var tTrigger = Math.max(0.05, (AIR_TIME - tPass) / 2);
@@ -1203,6 +1206,21 @@ function update(dt) {
       o.rollExtra = Math.min(MAX_ROLL_BONUS, o.rollT * ROLL_ACCEL);
       move = dx + o.rollExtra * dt;
       o.rot += move / (o.w / 2);        // Drehwinkel aus zurueckgelegter Strecke
+    }
+    if (o.kind === "bat") {
+      // Fliegt aktiv statt nur passiv mitzuscrollen: eine zusaetzliche
+      // Schliessgeschwindigkeit sobald sie sich dem Spieler naehern ("auf
+      // den Spieler zufliegen") - dieselbe Idee wie rollExtra bei Felsen.
+      // o.bobT laeuft weiter fuer die Flugwelle, aber NUR optisch (siehe
+      // drawBat) - o.y (die echte Kollisionshoehe) bleibt fest auf baseY.
+      // Erster Versuch liess auch o.y wippen (+-9px): das hat den wirklich
+      // knappen Duck-Sicherheitsabstand der mittleren Hoehenstufe (nur
+      // ~5px, siehe hits()) gesprengt - Autopilot-Soak sprang von 2-9 auf
+      // 9-17 Abstuerze pro 5 Minuten, fast ausschliesslich Fledermaus-
+      // Treffer trotz korrekt erkanntem "ducken". Seitdem rein optisch.
+      o.bobT += dt;
+      if (o.x - RUNNER_X < 260) { o.diveExtra = Math.min(150, o.diveExtra + dt * 300); }
+      move = dx + o.diveExtra * dt;
     }
     o.x -= move;
     if (o.kind === "bird" || o.kind === "bat") { o.flap += dt * 10; }
@@ -1697,27 +1715,54 @@ function drawBird(o) {
   if (up) { rr(o.x + 9, o.y - 3, 19, 9, 4.5); }
   else    { rr(o.x + 9, o.y + 16, 19, 9, 4.5); }
 }
+// Fluegel mit drei "Fingern" (Vorlage: echte Fledermaus-Anatomie - eine
+// Membran zwischen gespreizten Handknochen statt einer glatten Feder-
+// Flaeche wie beim Vogel). Duenne Ritzen zwischen den Fingern per
+// halbtransparentem Schwarz statt einer Theme-Farbe - dunkelt zuverlaessig
+// ab, egal wie hell/dunkel theme.ground gerade ist (Tag/Nacht-sicher, ohne
+// eine zweite Farbe mitfuehren zu muessen).
+function drawBatWing(bx, by, side, lift) {
+  var wx = bx + side * 4;
+  var f1x = bx + side * 12, f1y = by - lift * 0.7 - 3;
+  var f2x = bx + side * 21, f2y = by - lift;
+  var f3x = bx + side * 14, f3y = by + 4 - lift * 0.3;
+  ctx.beginPath();
+  ctx.moveTo(wx, by);
+  ctx.lineTo(f1x, f1y); ctx.lineTo(f2x, f2y); ctx.lineTo(f3x, f3y);
+  ctx.lineTo(bx + side * 7, by + 5);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.32)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(wx, by); ctx.lineTo(f1x, f1y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(wx, by); ctx.lineTo(f2x, f2y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(wx, by); ctx.lineTo(f3x, f3y); ctx.stroke();
+}
 // Fledermaus ersetzt in der Hoehle den Vogel (gleiche Spawn-Logik/Groesse,
-// siehe spawnObstacle) - spitze Lederfluegel statt Federn, kleine Ohren
-// statt Schnabel.
+// siehe spawnObstacle) - Lederfluegel mit Fingern statt Federn, Schnauze
+// statt Schnabel, kleiner Augen-Glanzpunkt. Kontinuierlicher Flap-Winkel
+// (Math.sin) statt zweier fest geschalteter Posen - fluessigere Bewegung.
 function drawBat(o) {
   G = ctx; ctx.fillStyle = theme.ground;
-  var up = Math.floor(o.flap) % 2 === 0;
-  var bx = o.x + 19, by = o.y + 13;
-  var wy = up ? by - 10 : by + 8;
-  ctx.beginPath();
-  ctx.moveTo(bx - 4, by); ctx.lineTo(bx - 21, wy); ctx.lineTo(bx - 8, by + 4);
-  ctx.closePath(); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(bx + 4, by); ctx.lineTo(bx + 21, wy); ctx.lineTo(bx + 8, by + 4);
-  ctx.closePath(); ctx.fill();
+  var lift = Math.sin(o.flap) * 9;
+  // Flugwelle nur in der Zeichnung, nicht in o.y (siehe Kommentar in
+  // update()) - sonst verschiebt sich die echte Kollisionsbox und der
+  // knappe Duck-Sicherheitsabstand reisst.
+  var bobOffset = Math.sin(o.bobT * 3.4) * 5;
+  var bx = o.x + 19, by = o.y + 13 + bobOffset;
+  drawBatWing(bx, by, -1, lift);
+  drawBatWing(bx, by, 1, lift);
   rr(bx - 6, by - 6, 12, 11, 5);
+  ctx.beginPath();
+  ctx.moveTo(bx - 2, by + 3); ctx.lineTo(bx, by + 7); ctx.lineTo(bx + 2, by + 3);
+  ctx.closePath(); ctx.fill();
   ctx.beginPath();
   ctx.moveTo(bx - 5, by - 5); ctx.lineTo(bx - 8, by - 13); ctx.lineTo(bx - 1, by - 6);
   ctx.closePath(); ctx.fill();
   ctx.beginPath();
   ctx.moveTo(bx + 5, by - 5); ctx.lineTo(bx + 8, by - 13); ctx.lineTo(bx + 1, by - 6);
   ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  rr(bx - 3.5, by - 3, 1.8, 1.8, 1);
+  rr(bx + 1.5, by - 3, 1.8, 1.8, 1);
 }
 
 // Drei Varianten fuer sichtbare Abwechslung waehrend eines Bergabschnitts:

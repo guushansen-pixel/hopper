@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.23" -VersionCode 26 -Force
+              -VersionName "1.24" -VersionCode 27 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -863,3 +863,45 @@ in der 800px-Vorschau); sechs Autopilot-Soaks (18000 Frames) je
 2-9 Abstuerze - erhoehte Streuung, aber nicht systematisch schlechter,
 sondern dieselbe bekannte Autopilot-Grenze (prueft nur das naechste
 Hindernis) bei mehreren gleichzeitig aktiven Hoehlen-Gefahrenarten.
+
+## Fledermaeuse: realistischer + fliegen aktiv auf den Spieler zu (1.24)
+
+**Optik.** `drawBat()` bekommt richtige Fluegel statt einer einzelnen
+Dreiecksflaeche: `drawBatWing()` spannt drei "Finger" (Vorlage: echte
+Fledermaus-Anatomie - eine Membran zwischen gespreizten Handknochen)
+vom Handgelenk zu drei Membran-Punkten auf, mit duennen
+halbtransparent-schwarzen Ritzen dazwischen (dunkelt zuverlaessig ab,
+egal wie hell `theme.ground` gerade ist - kein zweiter Theme-Wert
+noetig). Dazu eine kleine Schnauze und zwei helle Augen-Glanzpunkte.
+Der Flap nutzt jetzt einen kontinuierlichen Winkel (`Math.sin(o.flap)`)
+statt zweier hart geschalteter Posen - fluessigere Bewegung.
+
+**Aktiver Flug.** Fledermaeuse hatten wie Voegel bisher nur die normale
+Weltscroll-Bewegung. Jetzt: sobald eine Fledermaus naeher als 260
+Weltdistanz an den Spieler herankommt, bekommt sie eine zusaetzliche
+Schliessgeschwindigkeit (`o.diveExtra`, deckelt bei 150, waechst mit
+300/s) - liest sich wie ein gezieltes Zuschwirren statt passivem
+Vorbeitreiben. Der Autopilot rechnet das in seine `closingSpeed` mit
+ein, dieselbe Loesung wie schon bei rollenden Felsen (`rollExtra`).
+
+**Sicherheitslektion unterwegs:** der erste Versuch liess auch die
+tatsaechliche Kollisionshoehe (`o.y`) im Sinus mitschwingen (+-9px,
+fuer eine Flugwelle). Autopilot-Soak sprang danach von 2-9 auf 9-17
+Abstuerze pro 5 Minuten, fast ausschliesslich Fledermaus-Treffer -
+Ursache gefunden per direktem `hits()`-Nachrechnen: die mittlere
+Hoehenstufe hatte beim Ducken nur ~5px Sicherheitsabstand
+(`ry`=`groundY-25` vs. Fledermaus-Unterkante `groundY-30` bei
+statischer Hoehe), die 9px-Amplitude riss diesen Abstand also klar.
+Fix: `o.y` (Kollision) bleibt fest auf `baseY`, die Flugwelle
+(`o.bobT`) bewegt nur noch die Zeichnung (`drawBat()`s lokaler
+`bobOffset`, Amplitude 5px rein optisch) - Kollisionsverhalten seitdem
+wieder exakt wie bei der urspruenglichen statischen Hoehe.
+
+Verifiziert: isolierte Einzelfledermaus per Frame-fuer-Frame-Log
+(Autopilot duckt korrekt, kein Trefferereignis); enger Schwarm
+(3 Fledermaeuse, 46px Abstand) 10x wiederholt - 1 Treffer in 10
+Durchlaeufen (im Rahmen der dokumentierten Autopilot-Grenze bei engen
+Formationen, keine neue Regression); volle Autopilot-Soaks (6x 18000
+Frames, danach 1x 36000 Frames) zurueck im Basiswert 1-4 Abstuerze;
+kein Konsolenfehler; Screenshot mit Einzeltier und Dreiergruppe in
+unterschiedlichen Flap-Phasen.
