@@ -171,6 +171,19 @@
   .switch[aria-checked="true"] { background: var(--btnOn); box-shadow: none; }
   .switch[aria-checked="true"]::after { transform: translateX(20px); }
 
+  .levels { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 14px 0 0; }
+  .level { flex-direction: column; gap: 5px; padding: 14px 8px 12px; border: 2px solid transparent; position: relative; }
+  .level[aria-pressed="true"] { border-color: var(--sel); }
+  .level .lvlName { font-size: 13px; font-weight: 700; }
+  .level .lvlSub { font-size: 11px; color: var(--soft); font-weight: 500; }
+  .level.locked { opacity: .5; }
+  .level .lock {
+    position: absolute; top: 8px; right: 8px; width: 20px; height: 20px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: var(--glassBtn); color: var(--soft); margin: 0; padding: 0;
+  }
+  .level .lock[hidden] { display: none; }
+
   .head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
   .head h2 { font-size: 19px; font-weight: 700; flex: 1; text-align: left; }
   .back { width: 40px; height: 40px; border-radius: 14px; margin: 0; padding: 0; font-size: 19px; }
@@ -247,9 +260,32 @@
       <div><span>Bestwert</span><b id="mHigh">00000</b></div>
       <div><span>Zuletzt</span><b id="mLast">00000</b></div>
     </div>
-    <div class="row" id="caveStartRow" hidden>
-      <span class="lbl">Level 2: Hoehle<span class="sub">Statt Level 1 (Wueste) spielen</span></span>
-      <button class="switch" id="swCaveStart" role="switch" aria-checked="false" aria-label="Hoehlenstart"></button>
+    <div class="levels" id="levelSelect">
+      <button class="level" id="lvlDesert" aria-pressed="true" aria-label="Level 1: Wueste">
+        <svg class="lvlIcon" viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="22" cy="9" r="4"/>
+          <path d="M3 22c3-4 7-4 10 0s7 4 10 0"/>
+          <path d="M3 27c3-4 7-4 10 0s7 4 10 0"/>
+        </svg>
+        <span class="lvlName">Level 1</span>
+        <span class="lvlSub">Wueste</span>
+      </button>
+      <button class="level" id="lvlCave" aria-pressed="false" aria-label="Level 2: Hoehle">
+        <svg class="lvlIcon" viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 27V15a8 8 0 0 1 16 0v12"/>
+        </svg>
+        <span class="lvlName">Level 2</span>
+        <span class="lvlSub">Hoehle</span>
+        <span class="lock" id="lvlCaveLock" hidden>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor"
+               stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="10.5" width="14" height="10" rx="2.4"/>
+            <path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/>
+          </svg>
+        </span>
+      </button>
     </div>
     <button class="primary" id="btnPlay">Spielen</button>
     <button id="btnWardrobe">
@@ -704,15 +740,19 @@ function nextMountainGap() {
 //
 // Die Grenzwerte sind aus der tatsaechlichen Kollisionsgeometrie abgeleitet,
 // nicht geraten: hits() misst die Kopfhoehe ueber dem Boden als (rh - runner.y)
-// mit rh=47 stehend/springend, rh=30 geduckt. Gemessene Sprunghoehen
-// (runner.y, s. JUMP_CUT_MIN weiter oben):
-//   stehen/ducken (kein Sprung)  -> Kopfhoehe 30-47
-//   kuerzester Tipp (runner.y ~-65)  -> Kopfhoehe ~112
-//   voll gehalten (runner.y ~-122)   -> Kopfhoehe ~169
-// CAVE_MIN_GAP liegt deshalb bewusst zwischen 112 und 169: ein kurzer Tipp
-// bleibt sicher (Ground-Hindernisse bleiben ueberspringbar), ein voller
-// Sprung nicht mehr. CAVE_MAX_GAP liegt ueber 169, offene Abschnitte
-// schraenken also gar nichts ein.
+// mit rh=47 stehend/springend, rh=30 geduckt. Gemessene Kopfhoehen nach
+// Tipp-DAUER (echte Sprungphysik simuliert, nicht der isolierte kuerzeste Tipp):
+//   stehen/ducken (kein Sprung)         -> Kopfhoehe 30-47
+//   sehr kurzer Tipp (~20ms)            -> Kopfhoehe ~115
+//   normaler schneller Tipp (~60-80ms)  -> Kopfhoehe ~143-153
+//   laenger gehalten (~100ms+)          -> Kopfhoehe ~167, ab ~120ms voll 170
+// Erste Version hatte CAVE_MIN_GAP=136 - das traf schon jeden Tipp ueber
+// ~40ms, also praktisch jeden normal getimeten (nicht frame-genauen) Tipp.
+// Rueckmeldung: Höhle fuehlte sich unfair an, man stiess staendig an der
+// Decke an. Auf 158 angehoben: ein schneller Tipp bleibt jetzt zuverlaessig
+// sicher, nur wer spuerbar zu lange haelt (>=100ms) trifft an den engsten
+// Stellen. CAVE_MAX_GAP bleibt ueber dem vollen Sprung (170), offene
+// Abschnitte schraenken also weiterhin gar nichts ein.
 // Statt eines harten Schnitts bei CAVE_START: eine sichtbare Torbogen-
 // Silhouette scrollt heran, die Figur laeuft normal weiter darauf zu, dann
 // waechst eine schwarze Blende ueber das Bild - erst danach kommt
@@ -724,7 +764,7 @@ var ENTER_DURATION = 1.3;
 var ENTER_ARCH_OFFSET = 460;
 
 var CAVE_START = 2000;
-var CAVE_MIN_GAP = 136, CAVE_MAX_GAP = 210, CAVE_WAVELEN = 3200;
+var CAVE_MIN_GAP = 158, CAVE_MAX_GAP = 210, CAVE_WAVELEN = 3200;
 var scrollCeiling = 0;
 
 // Deckenhoehe (Abstand ueber dem Boden) an einer Weltposition, durchgehend
@@ -1498,14 +1538,25 @@ function drawRock(o) {
   ctx.globalAlpha = 1;
   ctx.restore();
 }
+// Ganzzahl-Hash (kein Math.random): liefert 0..1 rein aus n, also stabil bei
+// jedem Aufruf mit demselben n. Speckel/Risse haengen an Weltkoordinaten statt
+// an einem Array, damit sie beim Scrollen nicht flackern oder driften - selbes
+// Prinzip wie ceilingGapAt() als reine Funktion von worldX.
+function rockNoise(n) {
+  n = (n << 13) ^ n;
+  return (((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0);
+}
 // Deckenflaeche: dieselbe ceilingGapAt()-Funktion wie die Kollision, damit
-// sichtbare und toedliche Decke garantiert zusammenpassen.
+// sichtbare und toedliche Decke garantiert zusammenpassen. Textur (Gradient,
+// Speckel, Risse) liegt per ctx.clip() *innerhalb* genau dieser Kontur -
+// aendert also nie, wo die tatsaechliche toedliche Kante verlaeuft. Vorher war
+// die Flaeche eine einzige flache Farbe.
 function drawCeiling() {
   if (state.caveVis <= 0.01) { return; }
   G = ctx;
   var STEP = 40;
+  ctx.save();
   ctx.globalAlpha = state.caveVis;
-  ctx.fillStyle = theme.ground;
   ctx.beginPath();
   ctx.moveTo(0, 0);
   for (var x = 0; x <= LW; x += STEP) {
@@ -1514,22 +1565,97 @@ function drawCeiling() {
   ctx.lineTo(LW, groundY - ceilingGapAt(scrollCeiling + LW));
   ctx.lineTo(LW, 0);
   ctx.closePath();
+  // Basis bleibt theme.ground (wie vorher) - die Farbe ist in beiden Themes
+  // bereits als Kontur-/Silhouettenfarbe erprobt. theme.groundFill waere hier
+  // falsch: die Rolle kehrt sich zwischen Tag und Nacht um (tags fast weiss,
+  // nachts fast schwarz), ein Gradient darauf haette tags eine ausgewaschen
+  // helle Deckenkante ergeben. Tiefe/Textur kommt stattdessen aus schwarzer
+  // Transparenz obendrauf - funktioniert unabhaengig vom Theme.
+  ctx.fillStyle = theme.ground;
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.clip();
+  var depthGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+  depthGrad.addColorStop(0, "rgba(0,0,0,0.38)");
+  depthGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = depthGrad;
+  ctx.fillRect(0, 0, LW, groundY);
+  // Speckel: kleine Punkte mit wechselnder Groesse/Deckkraft fuer Steinkoernung.
+  var SPECK_STEP = 22;
+  var firstI = Math.floor(scrollCeiling / SPECK_STEP);
+  var lastI = Math.floor((scrollCeiling + LW) / SPECK_STEP) + 1;
+  for (var i = firstI; i <= lastI; i++) {
+    var wx = i * SPECK_STEP;
+    if (rockNoise(i * 7919) < 0.45) { continue; }
+    var gap = ceilingGapAt(wx);
+    var depth = 6 + rockNoise(i * 104729) * (gap * 0.45);
+    ctx.globalAlpha = state.caveVis * (0.20 + rockNoise(i * 5003) * 0.24);
+    ctx.fillStyle = "#000000";
+    ctx.beginPath();
+    ctx.arc(wx - scrollCeiling, groundY - gap + depth,
+            1.6 + rockNoise(i * 8161) * 2.1, 0, 6.2832);
+    ctx.fill();
+  }
+  // Risse: duenne, kurze Linien, die von der Kante ins Gestein laufen.
+  ctx.strokeStyle = "#000000"; ctx.lineWidth = 1.4;
+  var CRACK_STEP = 130;
+  var cFirst = Math.floor(scrollCeiling / CRACK_STEP);
+  var cLast = Math.floor((scrollCeiling + LW) / CRACK_STEP) + 1;
+  for (var j = cFirst; j <= cLast; j++) {
+    if (rockNoise(j * 617) < 0.5) { continue; }
+    var cwx = j * CRACK_STEP + rockNoise(j * 311) * CRACK_STEP;
+    var cTop = groundY - ceilingGapAt(cwx);
+    var csx = cwx - scrollCeiling;
+    var cLen = 10 + rockNoise(j * 991) * 26;
+    ctx.globalAlpha = state.caveVis * 0.42;
+    ctx.beginPath();
+    ctx.moveTo(csx, cTop);
+    ctx.lineTo(csx + (rockNoise(j * 13) - 0.5) * 10, cTop + cLen);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
-// Torbogen, auf den die Figur waehrend der Einlauf-Sequenz zulaeuft - reine
-// Landmarke, keine Kollision (die Sequenz laesst wie in update() beschrieben
-// gar nichts toedlich werden). Scrollt normal mit state.enterArchX mit.
+// Torbogen ("Hoehlentuer"), auf den die Figur waehrend der Einlauf-Sequenz
+// zulaeuft - reine Landmarke, keine Kollision (die Sequenz laesst wie in
+// update() beschrieben gar nichts toedlich werden). Scrollt normal mit
+// state.enterArchX mit. Zweischalig wie eine echte Oeffnung: ein texturierter
+// Steinrahmen (dieselbe Gradient-/Speckel-Optik wie drawCeiling) aussen, eine
+// dunkle Oeffnung innen - vorher war die komplette Flaeche eine flache Farbe.
 function drawCaveArch(x) {
   G = ctx;
-  ctx.fillStyle = "#14181f";
-  var w = 76, h = 130, r = w / 2;
-  ctx.beginPath();
-  ctx.moveTo(x, groundY);
-  ctx.lineTo(x, groundY - h + r);
-  ctx.arc(x + r, groundY - h + r, r, Math.PI, 0, false);
-  ctx.lineTo(x + w, groundY);
-  ctx.closePath();
+  var w = 84, h = 140;
+  function archPath(iw, ih) {
+    var ir = iw / 2, ox = x + (w - iw) / 2;
+    ctx.beginPath();
+    ctx.moveTo(ox, groundY);
+    ctx.lineTo(ox, groundY - ih + ir);
+    ctx.arc(ox + ir, groundY - ih + ir, ir, Math.PI, 0, false);
+    ctx.lineTo(ox + iw, groundY);
+    ctx.closePath();
+  }
+  archPath(w, h);
+  ctx.fillStyle = theme.ground;
+  ctx.fill();
+  ctx.save();
+  archPath(w, h);
+  ctx.clip();
+  var frameGrad = ctx.createLinearGradient(x, groundY - h, x, groundY);
+  frameGrad.addColorStop(0, "rgba(0,0,0,0.38)");
+  frameGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = frameGrad;
+  ctx.fillRect(x, groundY - h, w, h);
+  for (var i = 0; i < 16; i++) {
+    var sx = x + rockNoise(i * 733 + 11) * w;
+    var sy = groundY - rockNoise(i * 991 + 5) * h;
+    ctx.globalAlpha = 0.22 + rockNoise(i * 331) * 0.24;
+    ctx.fillStyle = "#000000";
+    ctx.beginPath();
+    ctx.arc(sx, sy, 1.5 + rockNoise(i * 17) * 2.0, 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  archPath(w - 20, h - 14);
+  ctx.fillStyle = "#0a0c10";
   ctx.fill();
 }
 // Waechst waehrend der Sequenz von der Figur aus zu einem bildschirmfuellenden
@@ -1706,8 +1832,9 @@ var elPaused = document.getElementById("paused");
 var elOver = document.getElementById("over");
 var elGear = document.getElementById("gearBtn");
 var elPause = document.getElementById("pauseBtn");
-var elCaveStartRow = document.getElementById("caveStartRow");
-var elSwCaveStart = document.getElementById("swCaveStart");
+var elLvlDesert = document.getElementById("lvlDesert");
+var elLvlCave = document.getElementById("lvlCave");
+var elLvlCaveLock = document.getElementById("lvlCaveLock");
 var settingsFrom = "menu";
 
 function show(name) {
@@ -1726,8 +1853,10 @@ function refreshMenu() {
   var caveMode = settings.startCave && caveUnlocked;
   document.getElementById("mHigh").textContent = pad5(readNum(caveMode ? CAVE_HIGH_KEY : HIGH_KEY));
   document.getElementById("mLast").textContent = pad5(readNum(caveMode ? CAVE_LAST_KEY : LAST_KEY));
-  elCaveStartRow.hidden = !caveUnlocked;
-  elSwCaveStart.setAttribute("aria-checked", caveMode ? "true" : "false");
+  elLvlDesert.setAttribute("aria-pressed", caveMode ? "false" : "true");
+  elLvlCave.setAttribute("aria-pressed", caveMode ? "true" : "false");
+  elLvlCave.classList.toggle("locked", !caveUnlocked);
+  elLvlCaveLock.hidden = caveUnlocked;
 }
 function toMenu() {
   newGame(true);
@@ -1863,9 +1992,18 @@ SWITCHES.forEach(function (s) {
   });
 });
 
-elSwCaveStart.addEventListener("click", function () {
+elLvlDesert.addEventListener("click", function () {
   audioInit();
-  settings.startCave = !settings.startCave;
+  if (!settings.startCave) { return; }
+  settings.startCave = false;
+  saveJson(SET_KEY, settings);
+  refreshMenu();
+  SFX.ui();
+});
+elLvlCave.addEventListener("click", function () {
+  audioInit();
+  if (!caveUnlocked || settings.startCave) { return; }
+  settings.startCave = true;
   saveJson(SET_KEY, settings);
   refreshMenu();
   SFX.ui();

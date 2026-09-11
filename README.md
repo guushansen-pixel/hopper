@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.15" -VersionCode 18 -Force
+              -VersionName "1.16" -VersionCode 19 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -505,3 +505,54 @@ zuvor auf.
 Vorfuehrmodus bleibt unveraendert beim sofortigen, unauffaelligen
 Uebergang (`caveOn = true` ohne Sequenz) - eine 1,3-Sekunden-Verdunklung
 mitten in der Lobby-Kulisse waere dort nur eine Ablenkung.
+
+## Hoehlentextur, Deckenhoehe entschaerft, richtiges Level-Menue (1.16)
+
+Drei Rueckmeldungen nach 1.15 auf einmal umgesetzt.
+
+**Textur.** `drawCeiling()` und `drawCaveArch()` waren bisher eine
+einzige flache Farbe (`theme.ground`). Beide bekommen jetzt Tiefe: ein
+per `ctx.clip()` auf die exakte Kontur begrenzter Tiefen-Gradient
+(schwarz-transparent, oben dunkler), dazu Speckel und Risslinien aus
+einer deterministischen Ganzzahl-Hash-Funktion (`rockNoise(n)`) statt
+`Math.random()` - haengen an Weltkoordinaten (wie `ceilingGapAt()`
+selbst), flackern also beim Scrollen nicht. Die Torbogen-Tuer bekam
+zusaetzlich eine zweite Ebene: ein texturierter Steinrahmen aussen, eine
+eigene dunkle Oeffnung (`#0a0c10`) innen, statt einer einzigen Flaeche.
+Bewusst *nicht* `theme.groundFill` fuer den Gradienten verwendet - die
+Rolle kehrt sich zwischen Tag/Nacht um (tags fast weiss, nachts fast
+schwarz), waere also tags als ausgewaschen helle Deckenkante
+aufgefallen. Schwarze Transparenz obendrauf auf der bewaehrten
+`theme.ground`-Basis funktioniert unabhaengig vom Theme. Verifiziert per
+Screenshot (Lobby-Level-Menue, Deckentextur, Torbogen waehrend der
+Einlauf-Sequenz).
+
+**Deckenhoehe.** Rueckmeldung: Hoehle fuehlt sich unfair an, man stoesst
+staendig an. Ursache per Simulation der echten Sprungphysik gefunden
+(nicht geraten): `CAVE_MIN_GAP = 136` hielt nur einem wirklich
+frame-genauen kuerzesten Tipp (~20ms, Kopfhoehe ~115) stand - ein ganz
+normaler schneller Tipp von 60-80ms erreicht bereits Kopfhoehe 143-153
+und traf die Decke an den engsten Stellen. Der sichere Spielraum
+zwischen "kuerzester Tipp" und "voll gehalten" (170) war mit nur 24px
+viel zu knapp fuer echtes menschliches Timing. `CAVE_MIN_GAP` auf 158
+angehoben: ein schneller Tipp bleibt jetzt zuverlaessig sicher, nur
+laengeres Halten (ab ~100ms) trifft noch an den engsten Stellen -
+genau das soll weiter bestraft werden. `CAVE_MAX_GAP` unveraendert.
+Autopilot-Soak (20000 Frames, durchgehend `caveOn`) danach erneut mit
+0 unerwarteten Regressionen: 3 Abstuerze in ~5,5 simulierten Minuten,
+im Rahmen der schon dokumentierten Vorfuehrmodus-Grenze (Autopilot
+prüft nur das naechste Hindernis).
+
+**Level-Menue.** Der einzelne Schalter "Level 2: Hoehle" (nur sichtbar
+nach Freischaltung) wird durch zwei Karten ersetzt (`.levels`-Grid,
+Stil wie die bereits vorhandene Garderobe-Formauswahl): Level 1
+(Wueste) und Level 2 (Hoehle) stehen immer nebeneinander, die
+ausgewaehlte hat einen Rahmen (`aria-pressed`), Level 2 zeigt vor der
+Freischaltung ein Schloss-Badge und ist gedimmt, Klicks darauf bleiben
+dann wirkungslos. `elCaveStartRow`/`elSwCaveStart` durch
+`elLvlDesert`/`elLvlCave`/`elLvlCaveLock` ersetzt, `refreshMenu()`
+und die Klick-Handler entsprechend angepasst. Ein Bug dabei gefunden
+und behoben: `.level .lock { display:flex }` hatte hoehere Spezifitaet
+als die UA-Default-Regel fuer `[hidden]` und ueberstimmte sie, das
+Schloss blieb nach Freischaltung sichtbar - behoben mit einer
+expliziten `.level .lock[hidden] { display:none }`-Regel.
