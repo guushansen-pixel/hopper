@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.27" -VersionCode 30 -Force
+              -VersionName "1.28" -VersionCode 31 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -1002,3 +1002,38 @@ Funktionsaufruf und Screenshot geprueft (u.a. "HI 100%"/"50%" waehrend
 des Laufs, "Fortschritt: 100%" beim echten Levelabschluss ueber
 Autopilot-Steuerung, Level 2 weiterhin unveraendert "04500"/"05000");
 Autopilot-Soak (9000 Frames) ohne Regression; kein Konsolenfehler.
+
+## Level 1: mehr Tempo und Dichte zum Levelabschluss hin (1.28)
+
+Eigene Einschaetzung nach 1.27 bestaetigt bekommen: Level 1 kam in
+Autopilot-Soaks durchgehend auf 0 Abstuerze, und Voegel/Schlangen sind
+schon bei Fortschritt ~15-25% voll eingefuehrt - der laengere Rest des
+Levels brachte nichts Neues mehr. Zwei unabhaengige Stellschrauben,
+beide **nur in Level 1** (Level 2/die Hoehle hat ihr eigenes, bereits
+verifiziertes Tuning und war nicht angefragt):
+
+- **Tempo.** Neue Konstante `SPEED_MAX_L1 = 1400` (Level 1) getrennt von
+  `SPEED_MAX = 960` (weiterhin die Hoehle) - `state.speed = Math.min(
+  state.caveOn ? SPEED_MAX : SPEED_MAX_L1, ...)`. Die alte Obergrenze 960
+  wurde nach 42s erreicht und blieb fuer den Rest des (jetzt laengeren)
+  Levels flach; 1400 wird bei gleichem `SPEED_RAMP` erst nach 71s
+  erreicht - laenger als Level 1 dauert (per Simulation: 56s bis
+  Levelabschluss, Tempo dort bei 1170 und weiter steigend). Das Tempo
+  eskaliert jetzt durchgehend bis zum Ende statt vorher zu plateauen.
+- **Dichte.** `obstacleGap()` bekommt in Level 1 einen zusaetzlichen
+  Faktor `Math.max(0.72, 1 - state.score/CAVE_START*0.28)`, der den
+  Basis-Abstand zum Levelende hin um bis zu 28% verkuerzt. Wichtig: der
+  Abstand skaliert schon mit `state.speed` (Zeit zwischen Hindernissen =
+  Abstand/Tempo = reiner Koeffizient, unabhaengig vom Tempo selbst) -
+  der neue Faktor kuerzt also wirklich die Reaktionszeit zwischen
+  Hindernissen, nicht nur die Distanz am Bildschirm. Die Untergrenze
+  0.72 (nicht 0.5 oder tiefer) haelt das im per Autopilot-Soak
+  verifizierten fairen Rahmen.
+
+Verifiziert: sechs Autopilot-Soaks fuer Level 1 - 0-2 Abstuerze pro
+Lauf (vorher durchgehend 0), Todesfaelle liegen bei Fortschritt-Werten
+zwischen 25% und 69%, keine Haeufung ganz am Levelende trotz hoechster
+Dichte/hoechstem Tempo dort - keine unfaire Spitze. Level-2-Soak
+(18000 Frames) zeigt weiterhin `maxSpeed === 960` (Obergrenze
+unveraendert) und dieselbe Abstuerzerate wie vor der Aenderung; kein
+Konsolenfehler.

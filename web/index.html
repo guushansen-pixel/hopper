@@ -714,7 +714,18 @@ var GRAV_UP = 2350, GRAV_DOWN = 3500, GRAV_FAST = 7200;
 var JUMP_V = -770, JUMP_CUT = 0.45;
 var JUMP_CUT_MIN = -520;   // kuerzester Tipp erreicht 65 - raeumt jeden Bodengegner (max. 50)
 var COYOTE_TIME = 0.09, JUMP_BUFFER = 0.13;
-var SPEED_START = 330, SPEED_MAX = 960, SPEED_RAMP = 15;
+// SPEED_MAX war 960 (erreicht nach (960-330)/15 = 42s), CAVE_START braucht
+// seit 1.25 aber laenger (Level 1 ca. 57s bei Simulation) - Voegel/Schlangen
+// sind da schon laengst voll eingefuehrt (siehe BIRD_RAMP/SNAKE_RAMP), das
+// Tempo blieb fuer den ganzen Rest des Levels flach. Rueckmeldung: mehr
+// Tempo und Dichte zum Ende hin - aber nur in Level 1 (Wueste), nicht
+// angefragt fuer die Hoehle, deren Hindernisse (Stalaktiten-Kopfhoehe,
+// Fledermaus-diveExtra-Timing, ...) alle gegen die alte Obergrenze 960
+// vermessen/verifiziert sind. SPEED_MAX_L1 = 1400 wird bei gleichbleibendem
+// SPEED_RAMP erst nach 71s erreicht - laenger als Level 1 dauert, das Tempo
+// steigt dort also durchgehend bis zum Levelabschluss statt vorher zu
+// plateauen. SPEED_MAX (Hoehle) bleibt exakt beim alten, verifizierten Wert.
+var SPEED_START = 330, SPEED_MAX = 960, SPEED_MAX_L1 = 1400, SPEED_RAMP = 15;
 var RUNNER_X = 70;
 
 var screen = "menu";
@@ -1000,6 +1011,19 @@ function obstacleGap() {
   // eine einzelne Sprungbahn Platz hat. Bei 0.70 nur noch 1 in 10 Minuten;
   // ueber die 12s-Dauer kommen trotzdem bis zu 14 Felsen pro Abschnitt.
   var base = state.speed * (state.mountainOn ? 0.70 : 0.60);
+  // Rueckmeldung: Level 1 soll zum Levelabschluss hin dichter werden (siehe
+  // SPEED_MAX_L1-Kommentar) - nur dort, die Hoehle hat ihr eigenes, bereits
+  // verifiziertes Dichte-Tuning (Stalaktiten/-saeulen laufen ueber eigene
+  // forcedGap-Werte in spawnObstacle(), nicht ueber diese Funktion).
+  // base skaliert bereits mit state.speed (Zeit zwischen Hindernissen =
+  // gap/speed = Koeffizient, unabhaengig vom Tempo) - der Faktor hier
+  // verkuerzt also wirklich die Reaktionszeit zwischen Hindernissen, nicht
+  // nur die Distanz. Genau das soll "mehr Dichte" heissen. Untergrenze 0.72
+  // (statt z.B. 0.5) haelt das noch im per Autopilot-Soak verifizierten
+  // fairen Rahmen.
+  if (!state.caveOn) {
+    base *= Math.max(0.72, 1 - (state.score / CAVE_START) * 0.28);
+  }
   return base + Math.random() * base * 0.80;
 }
 
@@ -1068,7 +1092,7 @@ function update(dt) {
 
   if (state.phase === "running") {
     if (state.attract) { autoPilot(); }
-    state.speed = Math.min(SPEED_MAX, state.speed + SPEED_RAMP * dt);
+    state.speed = Math.min(state.caveOn ? SPEED_MAX : SPEED_MAX_L1, state.speed + SPEED_RAMP * dt);
     state.distance += state.speed * dt;
     var prev = state.score;
     state.score = Math.floor(state.distance / 14) + state.bonus;
