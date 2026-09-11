@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.18" -VersionCode 21 -Force
+              -VersionName "1.19" -VersionCode 22 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -649,3 +649,97 @@ vier Hoehlen-Hindernisarten (`stalactite`, `cactus`, `bat`, `snake`) und
 mit 2 Abstuerzen in 5,6 Minuten keine Verschlechterung; Level 1 (Wueste)
 per Screenshot gegengeprueft - Sonne/Wolken/Duenen und der originale
 Vogel/Kaktus-Skin unveraendert.
+
+## Zehn weitere Hoehlen-Ideen auf einmal (1.19)
+
+Nach dem Redesign in 1.18 alle zehn vorgeschlagenen Ideen umgesetzt statt
+einzeln nachzufragen.
+
+**Wassertropfen von der Decke.** Reine Deko, kein neues System - nutzt
+das vorhandene `particles`-Array/`spawnParticle()` wieder. Ein Timer
+(`state.dripIn`, Weltdistanz wie `state.spawnIn`) laesst gelegentlich
+einen Tropfen an einer zufaelligen Bildschirm-x-Position genau auf der
+sichtbaren Deckenkante (`ceilingGapAt()`) entstehen. Neue Partikelfarbe
+`"drip"` in `drawParticles()`, mit festem Ton statt `theme.dust` (siehe
+Begruendung bei `CAVE_SKY_TOP`) - ein Wassertropfen soll nicht je nach
+Tageszeit draussen die Farbe wechseln.
+
+**Tropfsteinsaeulen.** Neues Hindernis `"pillar"` - wie ein Stalaktit,
+aber mit deutlich tieferer Spitze (`PILLAR_TIP_MIN/MAX` 26-36 statt
+65-105). Aus der `hits()`-Formel hergeleitet: die Luecke zwischen
+Steh-Kopfhoehe (47) und Duck-Kopfhoehe (30) ergibt eine Sicherheitsspanne
+23-40, in der Stehen IMMER trifft und Ducken IMMER sicher ist - anders
+als beim normalen Stalaktiten (sicher bei Stehen UND Ducken, nur Springen
+gefaehrlich) erzwingt die Saeule also wirklich das Ducken. Nicht nur
+hergeleitet, sondern mit `hits()` bei Tip-Werten 20-44 durchgetestet:
+die Duck-Grenze liegt exakt bei 23, die Steh-Grenze bei 40 - der gewaehlte
+Bereich 26-36 haelt zu beiden je 3-4px Abstand. Rein dekorativer
+Boden-Stumpf (`o.stubH`) direkt darunter lässt es wie eine fast
+geschlossene Saeule mit schmalem Spalt aussehen, ohne eine zweite
+Kollisionsbox zu brauchen. Spawn ueber denselben Wuerfelwurf wie
+Stalaktiten (`spawnObstacle()`), 10 Prozentpunkte davon abgezweigt.
+
+**Leuchtmoos.** Kleine gruene Punkte direkt auf der Bodenlinie in
+`drawGround()`, eigener Zufalls-Seed (`rockNoise(n*2237)`, Schritt 48)
+statt des Fels-Speckel-Seeds, damit die Muster nicht synchron laufen -
+einziger Farbakzent am Boden.
+
+**Fledermausschwaerme.** `spawnObstacle()` spawnt in der Hoehle mit 30%
+Chance 2-3 Fledermaeuse statt einer, alle auf derselben Hoehe (nicht
+versetzt) - eine Hoehenvarianz haette die Autopilot-Klassifikation
+(`o.y`-Schwellen fuer duck/jump) pro Tier unterschiedlich ausfallen
+lassen koennen.
+
+**Echo.** `withCaveEcho()` spielt denselben Klang nochmal bei 32%
+Lautstaerke, 110ms verzoegert (kein echter Convolver - haette den
+winzigen Synth-Ansatz gesprengt). Nur an Sprung/Landung/Tod, den drei
+staendig wiederkehrenden Spiel-SFX - nicht an Menue-Klaengen.
+
+**Kristalle.** Eigenes Array `collectibles`, nicht `obstacles` -
+`hits()` ist generisch (prueft nur x/y/w/h) und laesst sich direkt
+wiederverwenden, bei Treffer aber `state.bonus += 25` statt `die()`.
+`state.score` ist jetzt `Math.floor(distance/14) + state.bonus` statt
+nur der Distanz-Formel. Immer auf dem Boden platziert (nie in
+Sprunghoehe) - ein Bonus darf niemals eine Risiko-Entscheidung
+erzwingen. Erster Anlauf (Intervall 420-800 Weltdistanz) spawnte 539
+Kristalle in 8 Minuten Autopilot-Soak - fuehlte sich wie ein
+Dauerzustand an, nicht wie ein Fund. Grund: das Intervall ist eine feste
+Distanz, aber `state.speed` waechst uebers Spiel, dieselbe Distanz kommt
+also in echter Zeit immer schneller wieder (derselbe Effekt wie bei
+`nextMountainGap()`, nur hier nicht extra kompensiert). Nach zwei
+weiteren Messungen (900-1600 → 632 in 20 Minuten, immer noch zu dicht)
+auf 1800-3000 angehoben - 335 in 20 Minuten (~alle 3,6s), fuehlt sich
+nach einem echten Fund an.
+
+**Vignette.** `drawCaveVignette()`, ein Radialverlauf zentriert auf die
+Bildschirmmitte (nicht auf die Figur - die steht nah am linken Rand,
+ein Kegel dort haette den ganzen rechten Bildschirmbereich mit den
+Hindernissen abgedunkelt und die Fairness-Grundregel verletzt, dass man
+jede Gefahr rechtzeitig sehen muss). Nur die Ecken werden dunkler, der
+komplette Spielbereich bleibt hell genug.
+
+**Lavaschein.** `drawCaveGlow()`, ein langsam pulsierender
+(`state.time`-basiert) warmer Gradient am unteren Bildrand - einziger
+Warmton in einer sonst reinen Grau/Schwarz-Palette.
+
+**Hoehlenmalereien.** Seltene, blasse Strich-Glyphen direkt in
+`drawCeiling()` ergaenzt (dieselbe geclippte Flaeche, dieselbe
+`rockNoise()`-Technik wie Speckel/Risse, aber mit deutlich groesserem
+Schritt/niedrigerer Wahrscheinlichkeit, damit sie selten bleiben).
+
+**Spinnennetze.** `drawCobwebs()`, feste Bildschirmposition in den
+oberen Ecken (kein Weltbezug, scrollt nicht mit).
+
+Alle zehn greifen ausschliesslich bei `state.caveOn` - Level 1 (Wueste)
+unveraendert. Verifiziert: `hits()`-Direkttest der Saeule bei Tip-Werten
+20-44 fuer Stehen/Ducken/Springen (siehe oben); Kristall-Aufnahme per
+direktem `update()`-Aufruf (Bonus/Score korrekt, kein Tod, Objekt
+entfernt); Autopilot-Soak 30000 Frames (8,3 Minuten) mit allen Funden
+gleichzeitig - 4 Abstuerze, alle fuenf Hoehlen-Hindernisarten
+(`cactus`, `pillar`, `stalactite`, `snake`, `bat`) vertreten, keine
+Verschlechterung gegenueber 1.18; Level-1-Soak zur Gegenprobe (nur
+Wuesten-Hindernisse, bis die im Vorfuehrmodus laengst bestehende
+automatische Wueste-zu-Hoehle-Umschaltung ab Score 2000 einsetzt -
+das ist keine neue Aenderung, sondern dieselbe seit 1.12 bestehende
+Vorfuehrmodus-Kulisse); kein Konsolenfehler ueber rund 183000
+`update()`-Aufrufe in Summe.

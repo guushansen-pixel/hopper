@@ -622,12 +622,20 @@ function noise(dur, vol, freq, q) {
   s.start(t); s.stop(t + dur + 0.02);
 }
 
+// Kleines "Echo" fuer die Hoehle: kein echter Convolver (wuerde den winzigen
+// Synth-Ansatz ueberdimensionieren), sondern derselbe Klang nochmal deutlich
+// leiser und leicht verzoegert. Nur an den staendig wiederkehrenden
+// Spiel-SFX (Sprung/Landung/Tod), nicht an Menue-Klaengen wie ui/equip.
+function withCaveEcho(playFn) {
+  playFn(1);
+  if (state.caveOn) { setTimeout(function () { playFn(0.32); }, 110); }
+}
 var SFX = {
-  jump:  function () { tone("triangle", 330, 700, 0.13, 0.5); },
-  land:  function () { tone("sine", 190, 70, 0.10, 0.45); noise(0.07, 0.16, 900, 0.8); },
+  jump:  function () { withCaveEcho(function (s) { tone("triangle", 330, 700, 0.13, 0.5 * s); }); },
+  land:  function () { withCaveEcho(function (s) { tone("sine", 190, 70, 0.10, 0.45 * s); noise(0.07, 0.16 * s, 900, 0.8); }); },
   duck:  function () { tone("square", 260, 150, 0.07, 0.20); },
   point: function () { tone("square", 880, 880, 0.07, 0.22); setTimeout(function () { tone("square", 1320, 1320, 0.09, 0.20); }, 75); },
-  die:   function () { tone("sawtooth", 420, 70, 0.55, 0.42); noise(0.35, 0.22, 420, 0.6); },
+  die:   function () { withCaveEcho(function (s) { tone("sawtooth", 420, 70, 0.55, 0.42 * s); noise(0.35, 0.22 * s, 420, 0.6); }); },
   ui:    function () { tone("square", 620, 620, 0.045, 0.16); },
   equip: function () { tone("triangle", 520, 780, 0.09, 0.20); },
   enter: function () { tone("sine", 520, 130, 1.0, 0.30); }
@@ -710,7 +718,7 @@ var SPEED_START = 330, SPEED_MAX = 960, SPEED_RAMP = 15;
 var RUNNER_X = 70;
 
 var screen = "menu";
-var state, runner, obstacles, clouds, pebbles, particles, stars;
+var state, runner, obstacles, clouds, pebbles, particles, stars, collectibles;
 var lastTime = 0, night = 0, nightDir = 0, nextNightAt = 700;
 
 // Bergabschnitte sind selten und exklusiv: waehrend eines Abschnitts
@@ -823,13 +831,14 @@ function newGame(attract) {
     time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0,
     mountainOn: false, mountainT: 0, mountainVis: 0,
     caveOn: startInCave, caveVis: startInCave ? 1 : 0,
-    entering: false, enterT: 0, enterArchX: 0
+    entering: false, enterT: 0, enterArchX: 0,
+    bonus: 0, dripIn: 60, crystalIn: 260
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
     coyote: COYOTE_TIME, buffer: 0, legT: 0, frame: 0, squash: 0, dustT: 0, capAt: 0
   };
-  obstacles = []; particles = []; clouds = []; pebbles = [];
+  obstacles = []; particles = []; clouds = []; pebbles = []; collectibles = [];
   for (var i = 0; i < 6; i++) {
     clouds.push({ x: Math.random() * LW, y: 26 + Math.random() * (groundY * 0.42),
                   s: 0.25 + Math.random() * 0.4, w: 34 + Math.random() * 30 });
@@ -870,14 +879,26 @@ function deathBurst(x, y) {
 function spawnObstacle() {
   if (state.mountainOn) { spawnRock(); return; }
   // 0.22 war bemessen, als die Decke selbst noch mittoedlich war - seit die
-  // Decke reine Optik ist (siehe Hoehle-Kommentar oben), sind Stalaktiten die
-  // einzige Hoehlen-eigene Gefahr und duerfen deutlich haeufiger kommen.
-  if (state.caveOn && Math.random() < 0.38) { return spawnStalactite(); }
+  // Decke reine Optik ist (siehe Hoehle-Kommentar oben), sind Stalaktiten/
+  // Tropfsteinsaeulen die einzige Hoehlen-eigene Gefahr und duerfen deutlich
+  // haeufiger kommen. Eine Wuerfel-Ziehung statt zwei unabhaengiger, damit
+  // die Gesamt-Haeufigkeit "Sonderhindernis von oben" kontrolliert bleibt.
+  if (state.caveOn) {
+    var cr0 = Math.random();
+    if (cr0 < 0.34) { return spawnStalactite(); }
+    if (cr0 < 0.44) { return spawnPillar(); }
+  }
   if (Math.random() < rampChance(BIRD_START, BIRD_RAMP, BIRD_TARGET)) {
     var hs = [groundY - 80, groundY - 54, groundY - 26];
-    obstacles.push({ kind: state.caveOn ? "bat" : "bird", x: LW + 20,
-                     y: hs[Math.floor(Math.random() * hs.length)],
-                     w: 38, h: 26, flap: Math.random() * 6 });
+    var baseY = hs[Math.floor(Math.random() * hs.length)];
+    // In der Hoehle manchmal ein kleiner Schwarm statt einer einzelnen
+    // Fledermaus - gleiche Hoehe fuer alle im Schwarm, damit die Autopilot-
+    // Klassifikation (o.y-Schwellen) nicht pro Tier unterschiedlich ausfaellt.
+    var swarm = (state.caveOn && Math.random() < 0.30) ? 2 + Math.floor(Math.random() * 2) : 1;
+    for (var b = 0; b < swarm; b++) {
+      obstacles.push({ kind: state.caveOn ? "bat" : "bird", x: LW + 20 + b * 46,
+                       y: baseY, w: 38, h: 26, flap: Math.random() * 6 });
+    }
     return;
   }
   if (Math.random() < rampChance(SNAKE_START, SNAKE_RAMP, SNAKE_TARGET)) {
@@ -911,6 +932,27 @@ function spawnStalactite() {
   var h = Math.max(10, gap - tip);
   obstacles.push({ kind: "stalactite", x: spawnX, y: groundY - gap, w: 34, h: h });
   return 170 + Math.random() * 80;
+}
+
+// Tropfsteinsaeule: wie ein Stalaktit, aber mit deutlich tieferer Spitze
+// (26-36 statt 65-105) - dazwischen liegt genau die Luecke zwischen Steh-
+// Kopfhoehe (47, hits() bei rh=47) und Duck-Kopfhoehe (30, rh=30). Folge:
+// im Stehen trifft er IMMER (anders als der normale Stalaktit), im Ducken
+// IMMER sicher. Erzwingt also wirklich das Ducken, nicht nur "nicht
+// springen". Nicht durch Simulation geraten, sondern aus derselben
+// hits()-Formel hergeleitet wie beim normalen Stalaktiten, dann mit
+// echtem Kollisionstest bei mehreren Tipp-Werten verifiziert (siehe
+// README) - der Sicherheitsabstand zu beiden Grenzen (23 bzw. 40) ist
+// bewusst grosszuegig.
+var PILLAR_TIP_MIN = 26, PILLAR_TIP_MAX = 36;
+function spawnPillar() {
+  var spawnX = LW + 20;
+  var gap = ceilingGapAt(scrollCeiling + spawnX);
+  var tip = PILLAR_TIP_MIN + Math.random() * (PILLAR_TIP_MAX - PILLAR_TIP_MIN);
+  var h = Math.max(10, gap - tip);
+  obstacles.push({ kind: "pillar", x: spawnX, y: groundY - gap, w: 30, h: h,
+                   stubH: 12 + Math.random() * 8 });
+  return 220 + Math.random() * 100;
 }
 
 // Felsen: rund, rollt herunter und wird waehrend der Fahrt schneller (siehe
@@ -964,8 +1006,8 @@ function autoPilot() {
     if (o.kind === "bird" || o.kind === "bat") {
       if (o.y <= groundY - 70) { continue; }
       want = (o.y <= groundY - 40) ? "duck" : "jump";
-    } else if (o.kind === "stalactite") {
-      want = "duck";   // Stalaktiten verlangen "nicht springen", nie ueberspringbar
+    } else if (o.kind === "stalactite" || o.kind === "pillar") {
+      want = "duck";   // Stalaktiten/Saeulen verlangen "nicht springen", nie ueberspringbar
     } else { want = "jump"; }
     if (want === "jump" && tContact > tTrigger) { want = "wait"; }
     break;
@@ -1005,7 +1047,7 @@ function update(dt) {
     state.speed = Math.min(SPEED_MAX, state.speed + SPEED_RAMP * dt);
     state.distance += state.speed * dt;
     var prev = state.score;
-    state.score = Math.floor(state.distance / 14);
+    state.score = Math.floor(state.distance / 14) + state.bonus;
     if (Math.floor(state.score / 100) > Math.floor(prev / 100) && state.score > 0) {
       state.flash = 1.0;
       if (!state.attract) { SFX.point(); }
@@ -1166,10 +1208,54 @@ function update(dt) {
     if (hits(o)) { die(); return; }
   }
 
+  // Kristalle: eigenes Array statt obstacles - hits() ist generisch (prueft
+  // nur x/y/w/h), laesst sich also direkt wiederverwenden, aber bei Treffer
+  // gibt es Bonuspunkte statt die() statt zu sterben.
+  if (state.caveOn) {
+    for (i = collectibles.length - 1; i >= 0; i--) {
+      var cr = collectibles[i];
+      cr.x -= dx;
+      if (cr.x + cr.w < -20) { collectibles.splice(i, 1); continue; }
+      if (hits(cr)) {
+        collectibles.splice(i, 1);
+        state.bonus += 25;
+        state.flash = 0.6;
+        SFX.equip();
+      }
+    }
+    state.crystalIn -= dx;
+    if (state.crystalIn <= 0) {
+      // 420-800 spawnte in einem 8-Minuten-Soak 539 Kristalle (ein Kristall
+      // ca. alle 0.9s) - fuehlte sich eher wie ein Dauerzustand an als wie
+      // ein besonderer Fund. 900-1600 war mit 632 in 20 Minuten (~alle 1.9s)
+      // immer noch zu dicht - der Weltabstand ist fix, aber state.speed
+      // waechst uebers Spiel, dieselbe Distanz kommt also in echter Zeit
+      // immer schneller wieder (siehe nextMountainGap() fuer dasselbe
+      // Problem bei den Bergabschnitten). 1800-3000 spawnte 236 in 20
+      // Minuten (~alle 3,6s) - fuehlt sich nach einem echten Fund an, nicht
+      // nach einem Dauerzustand.
+      state.crystalIn = 1800 + Math.random() * 1200;
+      // Immer auf dem Boden, nie in Sprunghoehe - ein Bonus darf nie eine
+      // Verzicht-oder-Risiko-Entscheidung erzwingen, einfach durchlaufen
+      // reicht.
+      collectibles.push({ x: LW + 20, y: groundY - 22, w: 14, h: 16 });
+    }
+    // Wassertropfen: reine Deko-Partikel von der Decke, reuses particles[]
+    // (siehe drawParticles "drip"-Fall). Bildschirm-x statt Weltkoordinate,
+    // die kurze Lebenszeit macht das Scrollen waehrenddessen irrelevant.
+    state.dripIn -= dx;
+    if (state.dripIn <= 0) {
+      state.dripIn = 90 + Math.random() * 160;
+      var dxp = 40 + Math.random() * (LW - 80);
+      var dyp = groundY - ceilingGapAt(scrollCeiling + dxp);
+      spawnParticle(dxp, dyp, 0, 25, 0.9 + Math.random() * 0.4, 2 + Math.random() * 1.2, "drip");
+    }
+  }
+
   // Die Decke selbst ist seit 1.17 reine Optik, keine Kollision mehr (siehe
   // Kommentar bei CAVE_MIN_GAP) - die echte Gefahr der Hoehle sind die
-  // Stalaktiten, die ueber die normale hits()-Pruefung im Obstacle-Loop oben
-  // sterben lassen.
+  // Stalaktiten und Tropfsteinsaeulen, die ueber die normale hits()-Pruefung
+  // im Obstacle-Loop oben sterben lassen.
 }
 
 function hits(o) {
@@ -1371,6 +1457,19 @@ function drawClouds() {
   }
   ctx.globalAlpha = 1;
 }
+// Ferner Lava-/Glutschein am unteren Bildrand - langsam pulsierend statt
+// statisch, damit die sonst reine Grau/Schwarz-Palette der Hoehle einen
+// warmen Kontrastpunkt bekommt. Reine Deko, kein Weltbezug/Scroll noetig,
+// liegt ohnehin unterhalb der sichtbaren Deckenkante.
+function drawCaveGlow() {
+  if (!state.caveOn) { return; }
+  var pulse = 0.5 + 0.5 * Math.sin(state.time * 0.6);
+  var g = ctx.createLinearGradient(0, groundY - 70, 0, groundY);
+  g.addColorStop(0, "rgba(220,110,40,0)");
+  g.addColorStop(1, "rgba(220,110,40," + (0.09 + 0.06 * pulse).toFixed(3) + ")");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, groundY - 70, LW, 70);
+}
 function drawGround() {
   // Wie die Decke (CAVE_SKY_TOP/BOT) haengt der Hoehlenboden nicht am
   // Tag/Nacht-Zyklus - sonst waere der Boden tagsueber fast weiss, mitten in
@@ -1406,13 +1505,34 @@ function drawGround() {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+    // Leuchtmoos/Pilze: seltene farbige Punkte direkt auf der Bodenlinie -
+    // eigener Schritt/eigene Hash-Basis, damit das Muster nicht mit den
+    // Fels-Speckeln synchron laeuft. Einziger Farbakzent am Boden neben dem
+    // Lavaschein, macht die sonst reine Grau-Palette lebendiger.
+    ctx.fillStyle = "#6fdba0";
+    var MSTEP = 48;
+    var mFirst = Math.floor(scrollCeiling / MSTEP);
+    var mLast = Math.floor((scrollCeiling + LW) / MSTEP) + 1;
+    for (var n = mFirst; n <= mLast; n++) {
+      if (rockNoise(n * 2237) < 0.72) { continue; }
+      var mx = n * MSTEP - scrollCeiling + rockNoise(n * 97) * 14;
+      ctx.globalAlpha = 0.35 + rockNoise(n * 53) * 0.25;
+      ctx.beginPath();
+      ctx.arc(mx, groundY - 1, 1.4 + rockNoise(n * 619) * 1.3, 0, 6.2832);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
 }
 function drawParticles() {
   for (var i = 0; i < particles.length; i++) {
     var p = particles[i], a = p.t / p.max;
+    // "drip" (Wassertropfen von der Hoehlendecke) ist ein fester Ton statt
+    // theme.dust - dieselbe Begruendung wie ueberall sonst in der Hoehle:
+    // theme.dust folgt dem Tag/Nacht-Zyklus, ein Tropfen soll immer gleich
+    // aussehen.
     ctx.globalAlpha = a * (p.c === "accent" ? 1 : 0.62);
-    ctx.fillStyle = (p.c === "accent") ? theme.accent : theme.dust;
+    ctx.fillStyle = (p.c === "accent") ? theme.accent : (p.c === "drip" ? "#6fc3e0" : theme.dust);
     ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (0.35 + a * 0.65), 0, 6.2832); ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -1701,6 +1821,26 @@ function drawCeiling() {
     ctx.lineTo(csx + (rockNoise(j * 13) - 0.5) * 10, cTop + cLen);
     ctx.stroke();
   }
+  // Hoehlenmalereien: seltene, blasse Strich-Glyphen auf der Deckenunterseite,
+  // rein dekorativ - dieselbe world-x-Technik wie Speckel/Risse, aber ein
+  // deutlich groesserer Schritt, damit sie selten und besonders wirken.
+  ctx.strokeStyle = "#000000"; ctx.lineWidth = 1.6;
+  var PAINT_STEP = 640;
+  var pFirst = Math.floor(scrollCeiling / PAINT_STEP);
+  var pLast = Math.floor((scrollCeiling + LW) / PAINT_STEP) + 1;
+  for (var m = pFirst; m <= pLast; m++) {
+    if (rockNoise(m * 811) < 0.6) { continue; }
+    var mwx = m * PAINT_STEP + rockNoise(m * 233) * (PAINT_STEP - 60);
+    var mTop = groundY - ceilingGapAt(mwx) + 14 + rockNoise(m * 71) * 10;
+    var msx = mwx - scrollCeiling;
+    ctx.globalAlpha = state.caveVis * 0.26;
+    ctx.beginPath();
+    ctx.moveTo(msx - 10, mTop + 6); ctx.lineTo(msx + 8, mTop);
+    ctx.moveTo(msx - 6, mTop + 2); ctx.lineTo(msx - 10, mTop + 9);
+    ctx.moveTo(msx, mTop - 1); ctx.lineTo(msx - 3, mTop + 8);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(msx + 9, mTop - 1, 1.6, 0, 6.2832); ctx.fill();
+  }
   ctx.restore();
 }
 // Torbogen ("Hoehlentuer"), auf den die Figur waehrend der Einlauf-Sequenz
@@ -1773,6 +1913,44 @@ function drawStalactite(o) {
   ctx.closePath();
   ctx.fill();
 }
+// Tropfsteinsaeule: wie drawStalactite (der haengende Teil ist die echte
+// Kollisionsbox), plus ein rein dekorativer Stumpf vom Boden aus - zusammen
+// liest es sich wie eine fast geschlossene Saeule mit einem schmalen Spalt,
+// durch den man ducken muss. o.stubH ist nur Optik, keine eigene Kollision.
+function drawPillar(o) {
+  G = ctx; ctx.fillStyle = theme.ground;
+  ctx.beginPath();
+  ctx.moveTo(o.x, o.y);
+  ctx.lineTo(o.x + o.w, o.y);
+  ctx.lineTo(o.x + o.w / 2, o.y + o.h);
+  ctx.closePath();
+  ctx.fill();
+  var sx = o.x + o.w / 2;
+  ctx.beginPath();
+  ctx.moveTo(sx - o.w * 0.4, groundY);
+  ctx.lineTo(sx + o.w * 0.4, groundY);
+  ctx.lineTo(sx, groundY - o.stubH);
+  ctx.closePath();
+  ctx.fill();
+}
+// Kristall: Bonus-Sammelobjekt, nie gefaehrlich - eigenes Array
+// (collectibles), nicht obstacles. Leichtes Pulsieren ueber state.time statt
+// eines Sprite-Wechsels.
+function drawCrystal(o) {
+  G = ctx;
+  var cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  var pulse = 0.85 + 0.15 * Math.sin(state.time * 4 + o.x * 0.05);
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(pulse, pulse);
+  ctx.fillStyle = "#7fd8e8"; ctx.globalAlpha = 0.35;
+  ctx.beginPath(); ctx.arc(0, 0, o.w * 0.9, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = "#bdf3fb";
+  ctx.beginPath();
+  ctx.moveTo(0, -o.h * 0.55); ctx.lineTo(o.w * 0.4, 0);
+  ctx.lineTo(0, o.h * 0.55); ctx.lineTo(-o.w * 0.4, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
 function drawSnake(o) {
   G = ctx; ctx.fillStyle = theme.ground;
   var segs = 5, sw = o.w / segs, t = state.time * 6;
@@ -1784,6 +1962,47 @@ function drawSnake(o) {
   rr(hx, hy, 14, o.h * 0.75, o.h * 0.35);
   ctx.fillStyle = theme.skyBot;
   rr(hx + 8, hy + 2, 3, 3, 1.5);
+}
+
+// Leichte Vignette in der Hoehle - dunkelt nur die Ecken ab, der komplette
+// Spielbereich (wo Hindernisse erscheinen) bleibt hell genug, um alles
+// rechtzeitig zu sehen. Bewusst kein "Taschenlampenkegel" um die Figur: die
+// steht nah am linken Rand, ein enger Kegel dort haette den ganzen rechten
+// Bildschirmbereich mit den Hindernissen abgedunkelt.
+function drawCaveVignette() {
+  if (!state.caveOn) { return; }
+  var g = ctx.createRadialGradient(LW * 0.5, LH * 0.55, LH * 0.62, LW * 0.5, LH * 0.55, LH * 1.05);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.32)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, LW, LH);
+}
+// Spinnennetze in den oberen Ecken - feste Bildschirmposition, scrollt nicht
+// mit der Welt (reine Deko, kein Weltbezug noetig).
+function drawCobweb(cx, cy, flip) {
+  var r = 46, dir = flip ? -1 : 1;
+  ctx.strokeStyle = "rgba(210,214,222,0.28)"; ctx.lineWidth = 1;
+  for (var a = 0; a <= 3; a++) {
+    var ang = (a / 3) * (Math.PI / 2);
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + dir * Math.cos(ang) * r, cy + Math.sin(ang) * r);
+    ctx.stroke();
+  }
+  for (var ring = 1; ring <= 3; ring++) {
+    var rr2 = r * ring / 3;
+    ctx.beginPath();
+    for (var a2 = 0; a2 <= 3; a2++) {
+      var ang2 = (a2 / 3) * (Math.PI / 2);
+      var px = cx + dir * Math.cos(ang2) * rr2, py = cy + Math.sin(ang2) * rr2;
+      if (a2 === 0) { ctx.moveTo(px, py); } else { ctx.lineTo(px, py); }
+    }
+    ctx.stroke();
+  }
+}
+function drawCobwebs() {
+  if (!state.caveOn) { return; }
+  drawCobweb(0, 0, false);
+  drawCobweb(LW, 0, true);
 }
 
 function pad5(n) {
@@ -1829,8 +2048,10 @@ function render() {
   drawCeiling();   // nach Wolken/Bergen/Duenen - die Decke deckt Himmel und
                     // Kulisse darunter ab, sonst wuerden Wolken sichtbar
                     // durch massiven Fels hindurch schweben.
+  drawCaveGlow();
   drawGround();
   if (state.entering) { drawCaveArch(state.enterArchX); }
+  for (var ci = 0; ci < collectibles.length; ci++) { drawCrystal(collectibles[ci]); }
   for (var i = 0; i < obstacles.length; i++) {
     var ob = obstacles[i];
     if (ob.kind === "bird") { drawBird(ob); }
@@ -1838,11 +2059,14 @@ function render() {
     else if (ob.kind === "rock") { drawRock(ob); }
     else if (ob.kind === "snake") { drawSnake(ob); }
     else if (ob.kind === "stalactite") { drawStalactite(ob); }
+    else if (ob.kind === "pillar") { drawPillar(ob); }
     else { drawCactus(ob); }
   }
   drawParticles();
   paintRunner(ctx, RUNNER_X, groundY + runner.y, runnerOpts());
   ctx.setTransform(unit * dpr, 0, 0, unit * dpr, 0, 0);
+  drawCaveVignette();
+  drawCobwebs();
   drawHud();
   drawEnterWipe();
 }
