@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.21" -VersionCode 24 -Force
+              -VersionName "1.22" -VersionCode 25 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -798,3 +798,30 @@ Screenshot geprueft (deutlich von Stalaktiten/Stalagmiten UND vom
 kleinen Sammelobjekt unterscheidbar); Autopilot-Soak (18000 Frames,
 5 Minuten) - 3 Abstuerze, keine Verschlechterung, alle Hoehlen-
 Hindernisarten weiterhin vertreten.
+
+## Kristalle: Glow + glasigere Optik (1.22)
+
+Rueckmeldung: die Boden-Kristalle sollten einen Schein-Effekt bekommen
+und realistischer aussehen.
+
+`drawCrystalSpike()` (Sammelobjekt UND Hindernis nutzen dieselbe
+Funktion) zeichnet den Zacken-Koerper jetzt mit einem Farbverlauf
+(hell zur Spitze, dunkler zur Basis - wirkt, als faengt die Spitze
+Licht) statt einer flachen Farbe, dazu eine duenne halbtransparente
+weisse Glanzkante an einer Seite. Neue Funktion `drawCrystalGlow()`
+(Radialverlauf, Hex+Alpha-Farbe statt `rgba()` - dieselbe Farbvariable
+reicht dann fuer Fuellung und Schein) aus dem bisherigen
+Sammelobjekt-Glimmer herausgezogen, damit auch `drawCactus()`s
+Hoehlen-Zweig sie nutzen kann - vorher hatte nur das Sammelobjekt einen
+Schein.
+
+Die in 1.21 begruendete Abgrenzung (Hindernis bewusst ohne
+Glimmer/Puls, damit "toedlich" und "harmlos" unterscheidbar bleiben)
+gilt jetzt anders: Groesse ist der Haupt-Unterschied (das Hindernis
+ist ueber die ganze Kaktus-Hoehe/Cluster-Breite gross, das
+Sammelobjekt bleibt ein kleiner einzelner Fund), Glow allein war
+ohnehin nie das tragende Unterscheidungsmerkmal.
+
+Verifiziert: Screenshot mit allen drei Hindernis-Farbvarianten plus
+Sammelobjekt nebeneinander; Autopilot-Soak (18000 Frames) ohne
+Regression; kein Konsolenfehler.

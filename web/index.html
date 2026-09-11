@@ -1656,11 +1656,13 @@ function drawCactus(o) {
   G = ctx; ctx.fillStyle = theme.ground;
   if (state.caveOn) {
     // Boden-Kristallzacken statt grauer Felszacken (frueheres Redesign) -
-    // dieselbe drawCrystalSpike()-Zeichnung wie das Sammelobjekt, aber
-    // groesser, ohne Glimmer/Puls und mit eigener Farbpalette
-    // (CRYSTAL_HAZARD_COLORS), damit die gefaehrliche Version trotz
-    // gleicher Technik nicht mit dem harmlosen Kristall verwechselt wird.
+    // dieselbe drawCrystalSpike()-Zeichnung wie das Sammelobjekt, inklusive
+    // Farbschein (drawCrystalGlow), aber deutlich groesser und mit eigener
+    // Farbpalette (CRYSTAL_HAZARD_COLORS) - die Groesse (ganze Kaktus-Hoehe,
+    // ueber die gesamte Cluster-Breite) bleibt der Hauptunterschied zum
+    // kleinen, einzeln stehenden Sammelobjekt.
     var hc = CRYSTAL_HAZARD_COLORS[o.variant || 0];
+    drawCrystalGlow(o.x + o.w / 2, groundY - o.ch * 0.55, o.w * 0.9 + o.ch * 0.5, hc.body);
     for (var j = 0; j < o.count; j++) {
       var sx = o.x + j * (o.cw + o.gap);
       var sh = o.ch - (j % 2 === 1 ? 6 : 0);
@@ -1963,18 +1965,39 @@ var CRYSTAL_VARIANTS = [
     { dx: 0.32, h: 0.65, w: 0.30, tilt: 0.16 },
     { dx: -0.08, h: 0.34, w: 0.20, tilt: -0.32 } ]
 ];
+// Weicher Farbschein hinter einem Kristall-Cluster - dieselbe Technik wie
+// der bisherige Sammelobjekt-Glimmer, jetzt als eigene Funktion, damit auch
+// die Boden-Hindernisse (drawCactus) ihn bekommen koennen. Hex+Alpha
+// (8-stelliges Hex) statt rgba(), damit dieselbe Farbvariable fuer Fuellung
+// UND Glimmer reicht.
+function drawCrystalGlow(cx, cy, r, color) {
+  var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, color + "77");
+  g.addColorStop(1, color + "00");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.fill();
+}
+// Farbverlauf statt Flaechenfarbe (heller zur Spitze, so als faengt dort
+// Licht) plus Facette und eine duenne Glanzkante - liest sich glasiger als
+// die reine zweifarbige Vorgaengerversion.
 function drawCrystalSpike(dx, h, w, tilt, body, facet) {
   ctx.save();
   ctx.translate(dx, 0); ctx.rotate(tilt);
-  ctx.fillStyle = body || "#2f9fc9";
+  var grad = ctx.createLinearGradient(0, -h, 0, 0);
+  grad.addColorStop(0, facet || "#d8f7fb");
+  grad.addColorStop(1, body || "#2f9fc9");
+  ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(-w / 2, 0); ctx.lineTo(-w / 2, -h * 0.16); ctx.lineTo(0, -h);
   ctx.lineTo(w / 2, -h * 0.16); ctx.lineTo(w / 2, 0);
   ctx.closePath(); ctx.fill();
-  ctx.fillStyle = facet || "#d8f7fb";
+  ctx.fillStyle = facet || "#d8f7fb"; ctx.globalAlpha = 0.85;
   ctx.beginPath();
   ctx.moveTo(-w * 0.05, -h * 0.18); ctx.lineTo(0, -h); ctx.lineTo(w * 0.20, -h * 0.20); ctx.lineTo(w * 0.03, 0);
   ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = Math.max(1, w * 0.06);
+  ctx.beginPath(); ctx.moveTo(-w * 0.4, -h * 0.12); ctx.lineTo(0, -h); ctx.stroke();
   ctx.restore();
 }
 function drawCrystal(o) {
@@ -1983,9 +2006,7 @@ function drawCrystal(o) {
   var pulse = 0.92 + 0.08 * Math.sin(state.time * 4 + o.x * 0.05);
   ctx.save();
   ctx.translate(cx, cy); ctx.scale(pulse, pulse);
-  ctx.fillStyle = "#7fd8e8"; ctx.globalAlpha = 0.28;
-  ctx.beginPath(); ctx.arc(0, -o.h * 0.4, o.w * 0.95, 0, 6.2832); ctx.fill();
-  ctx.globalAlpha = 1;
+  drawCrystalGlow(0, -o.h * 0.4, o.w * 1.1, "#7fd8e8");
   ctx.fillStyle = "#3a6470";
   ctx.beginPath(); ctx.ellipse(0, 0, o.w * 0.52, o.h * 0.12, 0, 0, 6.2832); ctx.fill();
   var spikes = CRYSTAL_VARIANTS[o.variant || 0];
