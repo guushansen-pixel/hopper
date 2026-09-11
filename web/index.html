@@ -875,7 +875,8 @@ function spawnObstacle() {
   if (state.caveOn && Math.random() < 0.38) { return spawnStalactite(); }
   if (Math.random() < rampChance(BIRD_START, BIRD_RAMP, BIRD_TARGET)) {
     var hs = [groundY - 80, groundY - 54, groundY - 26];
-    obstacles.push({ kind: "bird", x: LW + 20, y: hs[Math.floor(Math.random() * hs.length)],
+    obstacles.push({ kind: state.caveOn ? "bat" : "bird", x: LW + 20,
+                     y: hs[Math.floor(Math.random() * hs.length)],
                      w: 38, h: 26, flap: Math.random() * 6 });
     return;
   }
@@ -960,7 +961,7 @@ function autoPilot() {
     var tPass    = (o.w + 50) / closingSpeed;
     var tTrigger = Math.max(0.05, (AIR_TIME - tPass) / 2);
     if (tContact > tTrigger + 0.25) { continue; }
-    if (o.kind === "bird") {
+    if (o.kind === "bird" || o.kind === "bat") {
       if (o.y <= groundY - 70) { continue; }
       want = (o.y <= groundY - 40) ? "duck" : "jump";
     } else if (o.kind === "stalactite") {
@@ -973,13 +974,11 @@ function autoPilot() {
     runner.ducking = false;
     if (runner.coyote > 0) {
       doJump(true);
-      // In der Hoehle haelt der Autopilot sonst immer voll durch (Kopfhoehe
-      // ~169), das liegt ueber der enGsten Deckengrenze (136) - er starb
-      // dort praktisch bei jedem Sprung (2583 Abstuerze in 8 Minuten,
-      // ausschliesslich an der Decke). Ein kurzer Tipp (Kopfhoehe ~112)
-      // raeumt Bodenhindernisse genauso sicher und bleibt unter jeder
-      // Deckenhoehe - also einfach immer kurz tippen, sobald die Hoehle an
-      // ist, statt die Deckenhoehe erst vorherzusagen.
+      // Historisch: als die Decke noch toedlich war, musste der Autopilot
+      // hier zwingend kurz tippen, sonst starb er fast bei jedem Sprung (die
+      // Decke ist seit 1.17 reine Optik, siehe Hoehle-Kommentar). Der kurze
+      // Tipp raeumt Bodenhindernisse weiterhin genauso sicher, bleibt also
+      // unveraendert - kein Grund, hier laenger zu halten.
       if (state.caveOn) { runner.capAt = 0.02; }
     }
   }
@@ -1162,7 +1161,7 @@ function update(dt) {
       o.rot += move / (o.w / 2);        // Drehwinkel aus zurueckgelegter Strecke
     }
     o.x -= move;
-    if (o.kind === "bird") { o.flap += dt * 10; }
+    if (o.kind === "bird" || o.kind === "bat") { o.flap += dt * 10; }
     if (o.x + o.w < -20) { obstacles.splice(i, 1); continue; }
     if (hits(o)) { die(); return; }
   }
@@ -1284,17 +1283,32 @@ function rr(x, y, w, h, r) {
   G.fill();
 }
 
+// Unter Tage haengt die Beleuchtung nicht am Tag/Nacht-Zyklus draussen -
+// eine Hoehle ist immer gleich dunkel, egal was oben gerade scheint. Feste
+// Palette statt theme.skyTop/skyBot, die weiterhin dem Zyklus folgen (fuer
+// Level 1 und die Lobby-Kulisse).
+var CAVE_SKY_TOP = "#05060a", CAVE_SKY_BOT = "#12151d";
+// Fels-Grundton fuer Decke/Torbogen - ebenfalls fest statt theme.ground, das
+// zwischen Tag/Nacht die Rolle tauscht (tags mittelgrau, nachts hellgrau) und
+// die Hoehle sonst je nach Tageszeit draussen unterschiedlich hell wirken
+// liesse, obwohl unter Tage immer dieselbe Dunkelheit herrschen soll.
+var CAVE_ROCK = "#4b515c";
 function drawSky() {
   var g = ctx.createLinearGradient(0, 0, 0, groundY);
-  g.addColorStop(0, theme.skyTop); g.addColorStop(1, theme.skyBot);
+  if (state.caveOn) { g.addColorStop(0, CAVE_SKY_TOP); g.addColorStop(1, CAVE_SKY_BOT); }
+  else { g.addColorStop(0, theme.skyTop); g.addColorStop(1, theme.skyBot); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, LW, LH);
 }
+// Unter Tage lesen sich dieselben Punkte als Glimmer im Gestein statt als
+// Sterne - deshalb immer sichtbar (nicht an night gekoppelt) statt nur
+// nachts.
 function drawStars() {
-  if (night < 0.04) { return; }
+  var vis = state.caveOn ? 1 : night;
+  if (vis < 0.04) { return; }
   ctx.fillStyle = theme.star;
   for (var i = 0; i < stars.length; i++) {
     var s = stars[i];
-    ctx.globalAlpha = night * (0.55 + 0.45 * Math.sin(state.time * 1.6 + s.p)) * 0.85;
+    ctx.globalAlpha = vis * (0.55 + 0.45 * Math.sin(state.time * 1.6 + s.p)) * 0.85;
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.2832); ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -1358,14 +1372,40 @@ function drawClouds() {
   ctx.globalAlpha = 1;
 }
 function drawGround() {
-  ctx.fillStyle = theme.groundFill;
+  // Wie die Decke (CAVE_SKY_TOP/BOT) haengt der Hoehlenboden nicht am
+  // Tag/Nacht-Zyklus - sonst waere der Boden tagsueber fast weiss, mitten in
+  // einer sonst durchgehend dunklen Szene.
+  ctx.fillStyle = state.caveOn ? CAVE_SKY_BOT : theme.groundFill;
   ctx.fillRect(-4, groundY, LW + 8, LH - groundY + 4);
-  ctx.strokeStyle = theme.ground; ctx.lineWidth = 2;
+  ctx.strokeStyle = state.caveOn ? "#7d8798" : theme.ground; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0, groundY + 1); ctx.lineTo(LW, groundY + 1); ctx.stroke();
-  ctx.fillStyle = theme.soft;
+  // Fester heller Ton statt theme.dust/soft - die folgen dem Tag/Nacht-
+  // Zyklus und waeren nachts fast so dunkel wie der jetzt fixe dunkle Boden,
+  // die Kiesel wuerden also nachts im Hoehlenboden verschwinden.
+  ctx.fillStyle = state.caveOn ? "#7d8798" : theme.soft;
   for (var i = 0; i < pebbles.length; i++) {
     var p = pebbles[i];
     ctx.fillRect(p.x, p.y, p.w, 1.6);
+  }
+  // Fels-Sprenkel auf dem Boden, dieselbe rockNoise()-Technik wie die Decke -
+  // damit Boden und Decke sichtbar zusammengehoeren statt nur die Decke
+  // texturiert aussieht. scrollCeiling laeuft 1:1 mit der Welt, dieselbe
+  // Weltkoordinate wie oben, also passt die Textur beim Scrollen zusammen.
+  if (state.caveOn) {
+    ctx.fillStyle = "#000000";
+    var GSPECK = 26;
+    var gFirst = Math.floor(scrollCeiling / GSPECK);
+    var gLast = Math.floor((scrollCeiling + LW) / GSPECK) + 1;
+    for (var k = gFirst; k <= gLast; k++) {
+      if (rockNoise(k * 4001) < 0.55) { continue; }
+      var gx = k * GSPECK - scrollCeiling;
+      var gy = groundY + 5 + rockNoise(k * 9013) * 20;
+      ctx.globalAlpha = 0.10 + rockNoise(k * 271) * 0.14;
+      ctx.beginPath();
+      ctx.arc(gx, gy, 1.2 + rockNoise(k * 619) * 1.6, 0, 6.2832);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
 }
 function drawParticles() {
@@ -1484,8 +1524,34 @@ function runnerOpts() {
   };
 }
 
+// In der Hoehle sieht derselbe Hindernis-Cluster (count/cw/ch/gap, siehe
+// spawnObstacle) statt Kaktus wie ein Stalagmit aus - spitze Felszacken,
+// die vom Boden wachsen und optisch zu den haengenden Stalaktiten passen.
+// Kollisionsbox/Groesse bleiben unveraendert, nur die Zeichnung wechselt.
 function drawCactus(o) {
   G = ctx; ctx.fillStyle = theme.ground;
+  if (state.caveOn) {
+    for (var j = 0; j < o.count; j++) {
+      var sx = o.x + j * (o.cw + o.gap);
+      var sh = o.ch - (j % 2 === 1 ? 6 : 0);
+      var sy = groundY - sh;
+      var sw = o.cw + 6;
+      var lean = (j % 2 === 0) ? 3 : -4;
+      ctx.beginPath();
+      ctx.moveTo(sx - 2, groundY);
+      ctx.lineTo(sx + sw * 0.5 + lean, sy);
+      ctx.lineTo(sx + sw - 2, groundY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(sx + sw * 0.55, groundY);
+      ctx.lineTo(sx + sw * 0.78, sy + sh * 0.38);
+      ctx.lineTo(sx + sw * 0.95, groundY);
+      ctx.closePath();
+      ctx.fill();
+    }
+    return;
+  }
   for (var i = 0; i < o.count; i++) {
     var x = o.x + i * (o.cw + o.gap);
     var h = o.ch - (i % 2 === 1 ? 6 : 0);
@@ -1505,6 +1571,28 @@ function drawBird(o) {
   rr(o.x + 37, o.y + 10, 6, 4, 2);
   if (up) { rr(o.x + 9, o.y - 3, 19, 9, 4.5); }
   else    { rr(o.x + 9, o.y + 16, 19, 9, 4.5); }
+}
+// Fledermaus ersetzt in der Hoehle den Vogel (gleiche Spawn-Logik/Groesse,
+// siehe spawnObstacle) - spitze Lederfluegel statt Federn, kleine Ohren
+// statt Schnabel.
+function drawBat(o) {
+  G = ctx; ctx.fillStyle = theme.ground;
+  var up = Math.floor(o.flap) % 2 === 0;
+  var bx = o.x + 19, by = o.y + 13;
+  var wy = up ? by - 10 : by + 8;
+  ctx.beginPath();
+  ctx.moveTo(bx - 4, by); ctx.lineTo(bx - 21, wy); ctx.lineTo(bx - 8, by + 4);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(bx + 4, by); ctx.lineTo(bx + 21, wy); ctx.lineTo(bx + 8, by + 4);
+  ctx.closePath(); ctx.fill();
+  rr(bx - 6, by - 6, 12, 11, 5);
+  ctx.beginPath();
+  ctx.moveTo(bx - 5, by - 5); ctx.lineTo(bx - 8, by - 13); ctx.lineTo(bx - 1, by - 6);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(bx + 5, by - 5); ctx.lineTo(bx + 8, by - 13); ctx.lineTo(bx + 1, by - 6);
+  ctx.closePath(); ctx.fill();
 }
 
 // Drei Varianten fuer sichtbare Abwechslung waehrend eines Bergabschnitts:
@@ -1568,13 +1656,11 @@ function drawCeiling() {
   ctx.lineTo(LW, groundY - ceilingGapAt(scrollCeiling + LW));
   ctx.lineTo(LW, 0);
   ctx.closePath();
-  // Basis bleibt theme.ground (wie vorher) - die Farbe ist in beiden Themes
-  // bereits als Kontur-/Silhouettenfarbe erprobt. theme.groundFill waere hier
-  // falsch: die Rolle kehrt sich zwischen Tag und Nacht um (tags fast weiss,
-  // nachts fast schwarz), ein Gradient darauf haette tags eine ausgewaschen
-  // helle Deckenkante ergeben. Tiefe/Textur kommt stattdessen aus schwarzer
+  // CAVE_ROCK statt theme.ground/groundFill - beide folgen dem Tag/Nacht-
+  // Zyklus (unterschiedlich stark, teils mit vertauschten Rollen), die Decke
+  // soll aber immer gleich dunkel aussehen. Tiefe/Textur kommt aus schwarzer
   // Transparenz obendrauf - funktioniert unabhaengig vom Theme.
-  ctx.fillStyle = theme.ground;
+  ctx.fillStyle = CAVE_ROCK;
   ctx.fill();
   ctx.clip();
   var depthGrad = ctx.createLinearGradient(0, 0, 0, groundY);
@@ -1636,7 +1722,7 @@ function drawCaveArch(x) {
     ctx.closePath();
   }
   archPath(w, h);
-  ctx.fillStyle = theme.ground;
+  ctx.fillStyle = CAVE_ROCK;   // fest wie drawCeiling, siehe dortiger Kommentar
   ctx.fill();
   ctx.save();
   archPath(w, h);
@@ -1724,15 +1810,22 @@ function drawHud() {
 
 function render() {
   ctx.setTransform(unit * dpr, 0, 0, unit * dpr, 0, 0);
-  drawSky(); drawStars(); drawOrb();
+  drawSky(); drawStars();
+  if (!state.caveOn) { drawOrb(); }   // unter Tage keine Sonne/kein Mond
   if (state.shake > 0.001) {
     var m = state.shake * state.shake * 7;
     ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
   }
-  drawMountains(scrollPeaks, groundY - 40, 92, 260, theme.duneFar, state.mountainVis);
-  drawDunes(scrollFar,  groundY - 26, 34, 190, theme.duneFar);
-  drawDunes(scrollNear, groundY - 8,  22, 130, theme.duneNear);
-  drawClouds();
+  // Duenen/Berge/Wolken sind Wueste - in der Hoehle raeumen wir die Kulisse
+  // komplett weg (statt sie nur zu verdecken), sonst schauten Duenenhuegel
+  // unten aus dem "Fels" heraus. Decke, Boden und Stalaktiten bleiben die
+  // einzige Kulisse.
+  if (!state.caveOn) {
+    drawMountains(scrollPeaks, groundY - 40, 92, 260, theme.duneFar, state.mountainVis);
+    drawDunes(scrollFar,  groundY - 26, 34, 190, theme.duneFar);
+    drawDunes(scrollNear, groundY - 8,  22, 130, theme.duneNear);
+    drawClouds();
+  }
   drawCeiling();   // nach Wolken/Bergen/Duenen - die Decke deckt Himmel und
                     // Kulisse darunter ab, sonst wuerden Wolken sichtbar
                     // durch massiven Fels hindurch schweben.
@@ -1741,6 +1834,7 @@ function render() {
   for (var i = 0; i < obstacles.length; i++) {
     var ob = obstacles[i];
     if (ob.kind === "bird") { drawBird(ob); }
+    else if (ob.kind === "bat") { drawBat(ob); }
     else if (ob.kind === "rock") { drawRock(ob); }
     else if (ob.kind === "snake") { drawSnake(ob); }
     else if (ob.kind === "stalactite") { drawStalactite(ob); }

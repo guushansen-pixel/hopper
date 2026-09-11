@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.17" -VersionCode 20 -Force
+              -VersionName "1.18" -VersionCode 21 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -590,3 +590,62 @@ Stehen/Ducken unter einem Stalaktiten bleibt sicher; Autopilot-Soak
 (20000 Frames, durchgehend `caveOn`, hoehere Stalaktiten-Dichte) zeigt
 mit 2 Abstuerzen in 5,6 simulierten Minuten keine Verschlechterung
 gegenueber vorher.
+
+## Grosses Hoehlen-Redesign: Wueste raus, Fledermaeuse, Stalagmiten (1.18)
+
+Wunsch: die Hoehle soll "viel mehr wie eine Hoehle aussehen" - Wuesten-
+Kulisse raus, Voegel durch Fledermaeuse ersetzen, Kaktus-Skin
+ueberarbeiten.
+
+**Kulisse.** `drawDunes()` (beide Parallax-Ebenen) und `drawMountains()`
+laufen in `render()` jetzt nur noch ausserhalb der Hoehle - vorher
+schauten Duenenhuegel unten aus dem "massiven Fels" heraus, weil sie
+naeher am Boden liegen als die Deckenkontur reicht. `drawClouds()` und
+`drawOrb()` (Sonne/Mond) waren durch die Deckenflaeche zwar schon
+unsichtbar (liegen hoeher im Bild als die engste Deckenkante je reicht),
+werden in der Hoehle aber trotzdem uebersprungen statt sinnlos gezeichnet.
+
+**Feste Hoehlen-Palette statt Tag/Nacht-Zyklus.** Bisher folgten Himmel
+und Boden in der Hoehle weiter `theme.skyTop/skyBot/groundFill` - bei
+"Tag" draussen also ein fast weisser Boden und ein hellblauer Himmel
+mitten in einer angeblich dunklen Hoehle. `CAVE_SKY_TOP`/`CAVE_SKY_BOT`
+(Himmel, `drawSky()`) und ein fixer Bodenton (`drawGround()`) sorgen
+jetzt dafuer, dass die Hoehle immer gleich dunkel aussieht, unabhaengig
+davon, was draussen gerade scheint. Aus demselben Grund bekommen
+`drawCeiling()`/`drawCaveArch()` einen neuen festen Grundton
+(`CAVE_ROCK`) statt `theme.ground` - das tauscht zwischen Tag/Nacht sogar
+die Rolle (tags mittelgrau, nachts hellgrau), die Decke waere also je
+nach Tageszeit unterschiedlich hell gewesen. Kiesel/Trennlinie am Boden
+bekommen aus demselben Grund einen fixen hellen Ton statt
+`theme.dust`/`theme.soft` - die waeren nachts fast so dunkel wie der neue
+feste Boden und darin verschwunden. Die "Sterne" (`drawStars()`) sind in
+der Hoehle immer sichtbar statt nur nachts - lesen sich dort als Glimmer
+im Gestein statt als Sternenhimmel, mit derselben Funktion/denselben
+Positionen wiederverwendet statt einer zweiten Partikelart.
+
+**Boden-Textur.** `drawGround()` bekommt in der Hoehle dieselbe
+`rockNoise()`-Speckel-Technik wie die Decke (siehe 1.16), an dieselbe
+Weltkoordinate (`scrollCeiling`) gehaengt, damit Boden und Decke beim
+Scrollen sichtbar zusammengehoeren statt nur die Decke texturiert
+auszusehen.
+
+**Fledermaeuse statt Voegel.** `spawnObstacle()` markiert den
+Vogel-Zweig in der Hoehle als `kind: "bat"` statt `"bird"` (gleiche
+Spawn-Rampe/Groesse/Hoehenraster, nur die Zeichnung `drawBat()` ist neu:
+spitze Lederfluegel statt Federn, kleine Ohren statt Schnabel). Die
+beiden anderen `kind === "bird"`-Stellen (Flap-Timer in `update()`,
+Autopilot-Klassifikation) pruefen jetzt `"bird" || "bat"`.
+
+**Kaktus-Skin.** `drawCactus()` zeichnet in der Hoehle spitze
+Felszacken/Kristallzacken statt der gruenen Kaktus-Arme - liest sich wie
+ein Stalagmit, passend zu den haengenden Stalaktiten. Spawn-Logik,
+Gruppierung (`count`/`cw`/`ch`/`gap`) und Kollisionsbox bleiben
+unveraendert, nur `drawCactus()` verzweigt auf `state.caveOn`.
+
+Verifiziert: Screenshot-Vergleich mit erzwungener "Nacht" draussen zeigt
+eine optisch identische Hoehle (Beweis, dass die feste Palette wirklich
+unabhaengig vom Zyklus ist); Autopilot-Soak (20000 Frames) zeigt alle
+vier Hoehlen-Hindernisarten (`stalactite`, `cactus`, `bat`, `snake`) und
+mit 2 Abstuerzen in 5,6 Minuten keine Verschlechterung; Level 1 (Wueste)
+per Screenshot gegengeprueft - Sonne/Wolken/Duenen und der originale
+Vogel/Kaktus-Skin unveraendert.
