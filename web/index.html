@@ -913,7 +913,8 @@ function spawnObstacle() {
   var cw = tall ? 17 : 15, ch = tall ? 50 : 36, gap = 4;
   obstacles.push({ kind: "cactus", x: LW + 20, y: groundY - ch,
                    w: count * cw + (count - 1) * gap, h: ch,
-                   count: count, cw: cw, ch: ch, gap: gap });
+                   count: count, cw: cw, ch: ch, gap: gap,
+                   variant: Math.floor(Math.random() * CRYSTAL_HAZARD_COLORS.length) });
 }
 
 // Stalaktit: haengt von der aktuellen (rein optischen) Deckenwelle herab,
@@ -1654,24 +1655,22 @@ function runnerOpts() {
 function drawCactus(o) {
   G = ctx; ctx.fillStyle = theme.ground;
   if (state.caveOn) {
+    // Boden-Kristallzacken statt grauer Felszacken (frueheres Redesign) -
+    // dieselbe drawCrystalSpike()-Zeichnung wie das Sammelobjekt, aber
+    // groesser, ohne Glimmer/Puls und mit eigener Farbpalette
+    // (CRYSTAL_HAZARD_COLORS), damit die gefaehrliche Version trotz
+    // gleicher Technik nicht mit dem harmlosen Kristall verwechselt wird.
+    var hc = CRYSTAL_HAZARD_COLORS[o.variant || 0];
     for (var j = 0; j < o.count; j++) {
       var sx = o.x + j * (o.cw + o.gap);
       var sh = o.ch - (j % 2 === 1 ? 6 : 0);
-      var sy = groundY - sh;
       var sw = o.cw + 6;
-      var lean = (j % 2 === 0) ? 3 : -4;
-      ctx.beginPath();
-      ctx.moveTo(sx - 2, groundY);
-      ctx.lineTo(sx + sw * 0.5 + lean, sy);
-      ctx.lineTo(sx + sw - 2, groundY);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(sx + sw * 0.55, groundY);
-      ctx.lineTo(sx + sw * 0.78, sy + sh * 0.38);
-      ctx.lineTo(sx + sw * 0.95, groundY);
-      ctx.closePath();
-      ctx.fill();
+      var lean = (j % 2 === 0) ? -0.06 : 0.08;
+      ctx.save();
+      ctx.translate(sx, groundY);
+      drawCrystalSpike(sw * 0.5, sh, sw, lean, hc.body, hc.facet);
+      drawCrystalSpike(sw * 0.82, sh * 0.5, sw * 0.4, -lean * 1.4, hc.body, hc.facet);
+      ctx.restore();
     }
     return;
   }
@@ -1942,6 +1941,17 @@ function drawPillar(o) {
 // Foto eines blauen Kristallstocks) - jeder Zacken zweifarbig (dunklerer
 // Koerper + helle Facette) fuer einen Glas-Eindruck. Drei Cluster-Formen
 // (CRYSTAL_VARIANTS) fuer sichtbare Abwechslung, wie bei drawRock().
+// Farbvarianten fuer die Boden-Kristallzacken (drawCactus, Hoehle) - je
+// Hindernis eine Variante, nicht je Zacke, damit ein Cluster wie eine
+// zusammenhaengende Formation wirkt statt bunt gemischt. Bewusst andere
+// Toene als das Sammelobjekt (CRYSTAL_VARIANTS/drawCrystal): das Hindernis
+// ist viel groesser und hat keinen Glimmer/Puls, Farbe allein soll trotzdem
+// nicht der einzige Unterschied zum ungefaehrlichen Kristall sein.
+var CRYSTAL_HAZARD_COLORS = [
+  { body: "#3a6fd8", facet: "#c9dcff" },
+  { body: "#2ab7a0", facet: "#bdf3e6" },
+  { body: "#5a5fc7", facet: "#d6d8ff" }
+];
 var CRYSTAL_VARIANTS = [
   [ { dx: -0.32, h: 0.62, w: 0.34, tilt: -0.12 },
     { dx: 0.05, h: 1.00, w: 0.42, tilt: 0 },
@@ -1953,15 +1963,15 @@ var CRYSTAL_VARIANTS = [
     { dx: 0.32, h: 0.65, w: 0.30, tilt: 0.16 },
     { dx: -0.08, h: 0.34, w: 0.20, tilt: -0.32 } ]
 ];
-function drawCrystalSpike(dx, h, w, tilt) {
+function drawCrystalSpike(dx, h, w, tilt, body, facet) {
   ctx.save();
   ctx.translate(dx, 0); ctx.rotate(tilt);
-  ctx.fillStyle = "#2f9fc9";
+  ctx.fillStyle = body || "#2f9fc9";
   ctx.beginPath();
   ctx.moveTo(-w / 2, 0); ctx.lineTo(-w / 2, -h * 0.16); ctx.lineTo(0, -h);
   ctx.lineTo(w / 2, -h * 0.16); ctx.lineTo(w / 2, 0);
   ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#d8f7fb";
+  ctx.fillStyle = facet || "#d8f7fb";
   ctx.beginPath();
   ctx.moveTo(-w * 0.05, -h * 0.18); ctx.lineTo(0, -h); ctx.lineTo(w * 0.20, -h * 0.20); ctx.lineTo(w * 0.03, 0);
   ctx.closePath(); ctx.fill();

@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.20" -VersionCode 23 -Force
+              -VersionName "1.21" -VersionCode 24 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -769,3 +769,32 @@ Verifiziert: alle drei Varianten nebeneinander gerendert und per
 Screenshot geprueft; Aufnahme per direktem `update()`-Aufruf weiterhin
 korrekt (Bonus +25, Objekt entfernt, kein Tod); Autopilot-Soak (18000
 Frames) ohne Regression.
+
+## Missverstaendnis korrigiert: Kristalltextur galt den Boden-Hindernissen (1.21)
+
+"Mit den Kristallen habe ich die Hindernisse auf dem Boden gemeint" -
+1.20 hatte das falsche Objekt umgebaut. Gemeint war das in 1.18 auf
+graue Felszacken umgestellte `drawCactus()` (Hoehle) - das sollte die
+Kristalltextur aus der Referenz bekommen, nicht das Sammelobjekt.
+
+`drawCrystalSpike()` (aus 1.20) um zwei Farbparameter erweitert
+(`body`/`facet`, vorher fest verdrahtet auf `#2f9fc9`/`#d8f7fb`) und
+direkt in `drawCactus()`s Hoehlen-Zweig wiederverwendet: pro Cluster
+zwei Zacken (eine grosse, eine kleine) statt der bisherigen grauen
+Dreiecke, in `theme.ground`. Drei Farbvarianten (`CRYSTAL_HAZARD_COLORS`
+- Blau, Tuerkis, Violett), eine pro Hindernis (nicht pro Zacke, damit
+ein Cluster wie eine zusammenhaengende Formation wirkt), gewaehlt beim
+Spawnen wie bei den Felsen-Varianten.
+
+Bewusst *nicht* dieselben Farben/dieselbe Groesse wie das
+Sammelobjekt: das Hindernis ist deutlich groesser (ganze
+Kaktus-Hoehe, 36-50px) und hat keinen Glimmer-Halo/Puls - Farbe allein
+sollte nicht der einzige Unterschied zwischen "toedlich" und
+"harmlos aufsammelbar" sein. Kollisionsbox/Spawn-Logik unveraendert,
+nur die Zeichnung wechselt (wie schon beim Rock-Skin in 1.18).
+
+Verifiziert: drei Farbvarianten nebeneinander gerendert und per
+Screenshot geprueft (deutlich von Stalaktiten/Stalagmiten UND vom
+kleinen Sammelobjekt unterscheidbar); Autopilot-Soak (18000 Frames,
+5 Minuten) - 3 Abstuerze, keine Verschlechterung, alle Hoehlen-
+Hindernisarten weiterhin vertreten.
