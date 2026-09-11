@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.28" -VersionCode 31 -Force
+              -VersionName "1.29" -VersionCode 32 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -1037,3 +1037,94 @@ Dichte/hoechstem Tempo dort - keine unfaire Spitze. Level-2-Soak
 (18000 Frames) zeigt weiterhin `maxSpeed === 960` (Obergrenze
 unveraendert) und dieselbe Abstuerzerate wie vor der Aenderung; kein
 Konsolenfehler.
+
+## Eigentest deckt Fairness-Luecke auf: SPEED_MAX_L1 wieder entfernt (1.29)
+
+Wunsch: selbst testen, ob sich 1.28 fair anfuehlt - nicht nur per
+Autopilot-Abstuerzerate (die reagiert immer exakt im letztmoeglichen
+Frame, ohne jede Verzoegerung, und hatte deshalb schon immer eine
+optimistischere Fairness-Aussage als ein echter Mensch sie bekommt).
+Neue Messgroesse: wie lange ist ein Hindernis sichtbar, bevor
+`autoPilot()`s eigene `tTrigger`-Formel "jetzt handeln" sagt (= der
+spaeteste noch sichere Moment)? Das ist das tatsaechliche
+Reaktionsfenster, das ein Mensch fuer EIN Hindernis hat.
+
+Ergebnis: das Minimum liegt schon beim unveraenderten Basiswert
+(`SPEED_MAX=960`, keine Dichte-Aenderung) bei 283ms - eher knapp,
+aber seit jeher so und nie beanstandet. Mit `SPEED_MAX_L1=1400`
+faellt das Minimum auf 183-233ms, und zwar **allein durchs Tempo**:
+ein Test mit reiner Dichte-Aenderung bei unveraendertem Tempo (960)
+unterschreitet in keinem Fall die 283ms, weil Dichte nur den Abstand
+ZWISCHEN Hindernissen aendert, nicht die Vorlaufzeit fuer eines davon
+(die haengt einzig an `state.speed`, ueber `tContact`/`tPass` in der
+`tTrigger`-Formel). Schon `SPEED_MAX_L1=1050` (nur 9% ueber 960) drueckt
+das Minimum bereits unter 283ms. Mit der aktuellen `tTrigger`-Formel
+(kein eingebauter Sicherheitspuffer, sie berechnet den spaetest-
+moeglichen Moment) ist mehr Tempo also nicht ohne Fairness-Verlust zu
+haben.
+
+Konsequenz: `SPEED_MAX_L1` komplett entfernt, Level 1 nutzt wieder
+`SPEED_MAX=960` wie die Hoehle. Die Dichte-Erhoehung aus 1.28
+(`obstacleGap()`) bleibt unveraendert bestehen, weil sie nachweislich
+keinen Einfluss auf dieses Reaktionsfenster hat.
+
+Verifiziert: Messung des Reaktionsfensters bei `SPEED_MAX_L1` in
+{960, 1050, 1100, 1150, 1250, 1400} zeigt einen klaren Zusammenhang
+(hoeher = kuerzeres Minimum, durchgehend unter 283ms sobald ueber
+960); dieselbe Messung nur mit Dichte-Variation (Boden bei 1.0/0.9/
+0.85/0.8, Tempo fest bei 960) zeigt durchgehend 283ms, 0 kurze
+Fenster; finaler Soak (Tempo zurueckgesetzt, Dichte behalten) 0-1
+Abstuerze pro Lauf, Reaktionsfenster wieder bei 283ms.
+
+## Schlangen-Ueberarbeitung: neongruenes Gift, das auf die Spielerhaltung zielt (1.29)
+
+Wunsch: Schlangen sollen neongruenes Gift schiessen, das den Spieler
+verfolgt. Bewusst NICHT als echtes Dauer-Tracking umgesetzt, direkt im
+Anschluss an die obige Fairness-Lektion: ein Geschoss, das jeden Frame
+neu auf die aktuelle Spielerposition nachlenkt, haette dieselbe Art
+Verifikationsarbeit gebraucht wie oben (und mehr) - mit echtem Risiko,
+am Ende ein technisch unmoegliches Ausweich-Szenario zu bauen. Stattdessen:
+das Geschoss zielt GENAU EINMAL beim Abschuss auf die aktuelle Haltung der
+Figur (`poisonTargetY()`) und fliegt danach schnurgerade auf dieser
+Bahn - technisch identisch zu einem Vogel (dieselbe `hits()`/
+`autoPilot()`-Hoehenlogik, dieselben zwei unteren Hoehenstufen), nur
+die Zielwahl kommt von der Spielerhaltung statt vom Zufall. Neongruener
+Glimmer-Halo + Kometenschweif (`drawPoison()`) tragen den "gezielter
+Schuss"-Eindruck optisch.
+
+Zwei echte Bugs beim Bauen gefunden und behoben (nicht nur Tuning):
+
+1. **Fehlendes `*dt`.** Die Bonusgeschwindigkeit wurde anfangs als
+   `move = dx + POISON_EXTRA` statt `dx + POISON_EXTRA*dt` addiert -
+   bei `POISON_EXTRA=260` waren das ~15600px/s zusaetzlich statt 260px/s,
+   das Geschoss war praktisch sofort da (Reaktionsfenster 0ms).
+2. **Falsche "harmlose" Hoehe.** `poisonTargetY()` zielte anfangs auf
+   die hohe/ignorierbare Vogel-Bahn, wenn die Figur beim Abschuss
+   gerade in der Luft war ("dann ist da oben ja niemand"). Falsch:
+   `hits()` zeigt, dass die Kollisionsbox waehrend des Steig-/Fallteils
+   eines Sprungs (`runner.y` zwischen ca. -77 und -14) trotzdem in die
+   obere Bahn hineinreicht - und da das Geschoss mehrere Sekunden
+   unterwegs ist, kann die Figur in der Zwischenzeit fuer ein ganz
+   anderes Hindernis laengst wieder gesprungen sein. Soak-Test: 2 von 10
+   Laeufen ein Treffer, obwohl das Reaktionsfenster dem sonst ueberall
+   sicheren Basiswert entsprach. Fix: nur noch die beiden unteren, aktiv
+   zu konternden Bahnen (ducken/springen), nie "einfach nichts tun".
+3. **Unloesbare Kombination mit der Schlange selbst.** Erste Fassung
+   feuerte das Geschoss von derselben Position UND Geschwindigkeit wie
+   die ausloesende Schlange ab - beide kommen dann zwangslaeufig
+   gleichzeitig an. Verlangte das Geschoss dabei "ducken", waehrend die
+   Schlange (wie immer) "springen" verlangt, war das ein garantierter,
+   unloesbarer Treffer. Fix: eigener Spawn-Zweig (`POISON_START/RAMP/
+   TARGET`, ab Score 520) statt an den Schlangen-Spawn gehaengt - laeuft
+   dadurch durch `obstacleGap()` wie jedes andere Hindernis und bekommt
+   denselben garantierten Abstand zu allem anderen, inklusive Schlangen.
+
+`POISON_EXTRA` bleibt am Ende bei 0 (keine Zusatzgeschwindigkeit) -
+schon 45px/s zusaetzlich draengten das Reaktionsfenster von 283ms auf
+250ms und erzeugten im Soak echte Treffer. Die neongruene Optik traegt
+den "Schuss"-Eindruck bereits ausreichend, ohne zusaetzliches Risiko.
+
+Verifiziert: 20 Autopilot-Soaks (9000 Frames) nach beiden Fixes - 0
+Gift-Treffer (vorher 2-3 pro 10 Laeufe je nach Bug), Reaktionsfenster
+283ms (Basiswert); Screenshot mit beiden Zielbahnen (Stehen -> mittel,
+Ducken -> tief); kein Konsolenfehler.

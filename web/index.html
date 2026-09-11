@@ -714,18 +714,22 @@ var GRAV_UP = 2350, GRAV_DOWN = 3500, GRAV_FAST = 7200;
 var JUMP_V = -770, JUMP_CUT = 0.45;
 var JUMP_CUT_MIN = -520;   // kuerzester Tipp erreicht 65 - raeumt jeden Bodengegner (max. 50)
 var COYOTE_TIME = 0.09, JUMP_BUFFER = 0.13;
-// SPEED_MAX war 960 (erreicht nach (960-330)/15 = 42s), CAVE_START braucht
-// seit 1.25 aber laenger (Level 1 ca. 57s bei Simulation) - Voegel/Schlangen
-// sind da schon laengst voll eingefuehrt (siehe BIRD_RAMP/SNAKE_RAMP), das
-// Tempo blieb fuer den ganzen Rest des Levels flach. Rueckmeldung: mehr
-// Tempo und Dichte zum Ende hin - aber nur in Level 1 (Wueste), nicht
-// angefragt fuer die Hoehle, deren Hindernisse (Stalaktiten-Kopfhoehe,
-// Fledermaus-diveExtra-Timing, ...) alle gegen die alte Obergrenze 960
-// vermessen/verifiziert sind. SPEED_MAX_L1 = 1400 wird bei gleichbleibendem
-// SPEED_RAMP erst nach 71s erreicht - laenger als Level 1 dauert, das Tempo
-// steigt dort also durchgehend bis zum Levelabschluss statt vorher zu
-// plateauen. SPEED_MAX (Hoehle) bleibt exakt beim alten, verifizierten Wert.
-var SPEED_START = 330, SPEED_MAX = 960, SPEED_MAX_L1 = 1400, SPEED_RAMP = 15;
+// 1.28 hatte hier zusaetzlich SPEED_MAX_L1=1400 fuer Level 1 versucht (mehr
+// Tempo zum Levelabschluss hin) - beim angeforderten Eigentest ("fuehlt sich
+// das fair an?") mit einer NEUEN Messung wieder verworfen: die eigentliche
+// Reaktionszeit pro Hindernis ist nicht die Zeit zwischen Hindernissen
+// (obstacleGap/Dichte), sondern die Zeit von Bildschirmeintritt bis
+// autoPilot()s eigener tTrigger-Deadline - und die haengt direkt an
+// state.speed (tTrigger ist ohnehin "letztmoeglicher Moment", ohne
+// eingebauten Puffer). Schon bei SPEED_MAX_L1=1050 (nur 9% ueber 960) fiel
+// das Minimum von 283ms auf 233ms, unter der urspruenglichen Grenze -
+// waehrend derselbe Test mit reiner Dichte-Reduktion (Tempo bleibt bei 960)
+// die 283ms in keinem Fall unterschreitet, weil Dichte nur den Abstand
+// ZWISCHEN Hindernissen aendert, nicht die Vorlaufzeit fuer eines davon.
+// Mehr Tempo ist mit der aktuellen tTrigger-Formel also nicht ohne
+// Fairness-Verlust zu haben; die Dichte-Erhoehung in obstacleGap() bleibt,
+// weil sie diesen Effekt nicht hat.
+var SPEED_START = 330, SPEED_MAX = 960, SPEED_RAMP = 15;
 var RUNNER_X = 70;
 
 var screen = "menu";
@@ -824,6 +828,9 @@ function ceilingGapAt(worldX) {
 // auf 24% in einem Frame.
 var BIRD_START = 120, BIRD_RAMP = 280, BIRD_TARGET = 0.22;
 var SNAKE_START = 380, SNAKE_RAMP = 320, SNAKE_TARGET = 0.20;
+// Erst nach SNAKE_START (thematisch: "Schlangen-Gift"), niedrigere Zielrate
+// als die Schlangen selbst - ein Sondergeschoss, nicht der Regelfall.
+var POISON_START = 520, POISON_RAMP = 340, POISON_TARGET = 0.13;
 
 function rampChance(start, len, target) {
   if (state.score < start) { return 0; }
@@ -902,6 +909,40 @@ function deathBurst(x, y) {
   }
 }
 
+// Zusaetzliche Schliessgeschwindigkeit fuers Geschoss - eigentlich sollte
+// ein "Schuss" schneller als state.speed sein, aber gemessen (siehe
+// Git-Historie/README): schon 45 zusaetzliche px/s druecken das minimale
+// Reaktionsfenster von 283ms (Basiswert, wie bei jedem anderen Hindernis)
+// auf 250ms und erzeugte in Soaks echte Treffer, obwohl der Automat den
+// Rest des Spiels bei 283ms durchgehend ueberlebt. Erster Implementierungs-
+// versuch hatte ausserdem einen echten Bug: die Bonusgeschwindigkeit wurde
+// ohne *dt addiert (~15000px/s statt 260px/s) - das Geschoss war praktisch
+// sofort da. 0 bleibt hier bewusst bei 0: die neongruene Optik (Glimmer +
+// Kometenschweif) und die auf die Spielerhaltung gezielte Flugbahn
+// (poisonTargetY()) tragen den "gezielter Schuss"-Eindruck bereits, ohne
+// zusaetzliches Tempo-Risiko einzugehen.
+var POISON_EXTRA = 0;
+// Zielbahn beim Abschuss einmalig aus der AKTUELLEN Haltung der Figur
+// abgeleitet, siehe Kommentar bei spawnObstacle(). Nur die beiden unteren
+// Hoehenstufen (Vogel-Hoehen: mittel=Ducken noetig, tief=Springen noetig) -
+// bewusst NIE die obere "ignorierbare" Vogel-Hoehe. Erster Versuch waehlte
+// die hohe Bahn, wenn die Figur beim Abschuss gerade in der Luft war ("dann
+// ist da oben ja sowieso niemand") - das stimmt aber nur im Sprungscheitel.
+// hits() zeigt: waehrend des Steig-/Fallteils eines Sprungs (runner.y
+// zwischen ca. -77 und -14) reicht die Kollisionsbox trotzdem in die obere
+// Bahn hinein. Da das Geschoss mehrere Sekunden unterwegs ist und die Figur
+// in der Zwischenzeit fuer ein GANZ ANDERES Hindernis erneut springen kann,
+// war "in der Luft = spaeter oben sicher" eine falsche Annahme - im
+// Soak-Test 2 von 10 Laeufen ein Treffer, obwohl das minimale
+// Reaktionsfenster dem sonst ueberall sicheren Basiswert entsprach. Mit nur
+// noch den beiden unteren, aktiv zu konternden Bahnen verlangt das Geschoss
+// immer eine bewusste Reaktion (ducken oder springen), nie ein "einfach
+// nichts tun" - dieselbe Klassifikation, die bei Voegeln fuer genau diese
+// zwei Bahnen bereits erprobt ist.
+function poisonTargetY() {
+  return runner.ducking ? groundY - 26 : groundY - 54;
+}
+
 // ======================================================== Hindernisse ======
 // Manche Zweige erzwingen einen Mindestabstand fuer den naechsten Spawn
 // (z.B. nach einem Stalaktiten) - dafuer wird ein Rueckgabewert genutzt,
@@ -937,6 +978,19 @@ function spawnObstacle() {
     // sicher bis Breite 55, ab 58 trifft es. 42-52 haelt Abstand zur Grenze.
     var sw = 42 + Math.random() * 10;
     obstacles.push({ kind: "snake", x: LW + 20, y: groundY - 16, w: sw, h: 16 });
+    return;
+  }
+  // Gift-Ueberarbeitung: eigener Spawn-Zweig statt an den Schlangen-Spawn
+  // gehaengt. Erster Versuch feuerte das Geschoss GLEICHZEITIG mit der
+  // Schlange von derselben Position ab - beide bewegen sich dann exakt
+  // gleich schnell (POISON_EXTRA=0) und kommen deshalb auch gleichzeitig an.
+  // Verlangte das Geschoss dabei "ducken" waehrend die Schlange "springen"
+  // verlangt (beides gleichzeitig unmoeglich), war das ein garantierter,
+  // unloesbarer Treffer. Als eigener Zweig laeuft es durch obstacleGap()
+  // wie jedes andere Hindernis und bekommt denselben garantierten Abstand
+  // zu allem anderen.
+  if (Math.random() < rampChance(POISON_START, POISON_RAMP, POISON_TARGET)) {
+    obstacles.push({ kind: "poison", x: LW + 20, y: poisonTargetY(), w: 16, h: 16 });
     return;
   }
   var tall = Math.random() < 0.45;
@@ -1046,12 +1100,13 @@ function autoPilot() {
     // Felsabschnitten wiederholt (127 von 135 Abstuerzen in 10 Minuten bei
     // zu enger Taktung, siehe README).
     var closingSpeed = state.speed + (o.kind === "rock" ? o.rollExtra : 0) +
-                        (o.kind === "bat" ? o.diveExtra : 0);
+                        (o.kind === "bat" ? o.diveExtra : 0) +
+                        (o.kind === "poison" ? POISON_EXTRA : 0);
     var tContact = (o.x - (RUNNER_X + 46)) / closingSpeed;
     var tPass    = (o.w + 50) / closingSpeed;
     var tTrigger = Math.max(0.05, (AIR_TIME - tPass) / 2);
     if (tContact > tTrigger + 0.25) { continue; }
-    if (o.kind === "bird" || o.kind === "bat") {
+    if (o.kind === "bird" || o.kind === "bat" || o.kind === "poison") {
       if (o.y <= groundY - 70) { continue; }
       want = (o.y <= groundY - 40) ? "duck" : "jump";
     } else if (o.kind === "stalactite" || o.kind === "pillar") {
@@ -1092,7 +1147,7 @@ function update(dt) {
 
   if (state.phase === "running") {
     if (state.attract) { autoPilot(); }
-    state.speed = Math.min(state.caveOn ? SPEED_MAX : SPEED_MAX_L1, state.speed + SPEED_RAMP * dt);
+    state.speed = Math.min(SPEED_MAX, state.speed + SPEED_RAMP * dt);
     state.distance += state.speed * dt;
     var prev = state.score;
     state.score = Math.floor(state.distance / 14) + state.bonus;
@@ -1265,6 +1320,7 @@ function update(dt) {
       if (o.x - RUNNER_X < 260) { o.diveExtra = Math.min(150, o.diveExtra + dt * 300); }
       move = dx + o.diveExtra * dt;
     }
+    if (o.kind === "poison") { move = dx + POISON_EXTRA * dt; }
     o.x -= move;
     if (o.kind === "bird" || o.kind === "bat") { o.flap += dt * 10; }
     if (o.x + o.w < -20) { obstacles.splice(i, 1); continue; }
@@ -2186,6 +2242,27 @@ function drawSnake(o) {
   ctx.fillStyle = theme.skyBot;
   rr(hx + 8, hy + 2, 3, 3, 1.5);
 }
+// Gift-Geschoss: neongruener Kern mit Glimmer-Halo und Kometenschweif nach
+// hinten (die Seite, aus der es kam - fliegt nach links, siehe POISON_EXTRA).
+function drawPoison(o) {
+  G = ctx;
+  var cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  var pulse = 0.85 + 0.15 * Math.sin(state.time * 10 + o.x * 0.1);
+  var glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, o.w * 1.5);
+  glow.addColorStop(0, "rgba(57,255,106,0.55)");
+  glow.addColorStop(1, "rgba(57,255,106,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(cx, cy, o.w * 1.5, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = "#1f8a3c";
+  ctx.beginPath();
+  ctx.moveTo(cx + o.w * 0.3, cy - o.h * 0.28); ctx.lineTo(cx + o.w * 1.4, cy);
+  ctx.lineTo(cx + o.w * 0.3, cy + o.h * 0.28);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#39ff6a";
+  ctx.beginPath(); ctx.arc(cx, cy, (o.w / 2) * pulse, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = "#c8ffd8";
+  ctx.beginPath(); ctx.arc(cx - o.w * 0.14, cy - o.h * 0.14, o.w * 0.16, 0, 6.2832); ctx.fill();
+}
 
 // Leichte Vignette in der Hoehle - dunkelt nur die Ecken ab, der komplette
 // Spielbereich (wo Hindernisse erscheinen) bleibt hell genug, um alles
@@ -2281,6 +2358,7 @@ function render() {
     else if (ob.kind === "bat") { drawBat(ob); }
     else if (ob.kind === "rock") { drawRock(ob); }
     else if (ob.kind === "snake") { drawSnake(ob); }
+    else if (ob.kind === "poison") { drawPoison(ob); }
     else if (ob.kind === "stalactite") { drawStalactite(ob); }
     else if (ob.kind === "pillar") { drawPillar(ob); }
     else { drawCactus(ob); }
