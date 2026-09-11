@@ -1740,20 +1740,22 @@ function drawBirdWing(bx, by, flapAngle) {
 function drawBird(o) {
   G = ctx; ctx.fillStyle = theme.ground;
   var flapAngle = Math.sin(o.flap) * 0.9 - 0.15;
-  rr(o.x + 8, o.y + 10, 24, 9, 4.5);
-  rr(o.x + 28, o.y + 6, 11, 10, 4);
-  // Schnabel: spitzes Dreieck statt Rechteck.
+  // Kopf/Schnabel vorn links (Flugrichtung, Vogel bewegt sich mit dem
+  // Weltscroll nach links auf die Figur zu), Schwanz hinten rechts -
+  // Rueckmeldung: vorher zeigte der Schnabel nach rechts, der Vogel wirkte
+  // wie rueckwaerts fliegend.
+  rr(o.x + 12, o.y + 10, 24, 9, 4.5);
+  rr(o.x + 1, o.y + 6, 11, 10, 4);
   ctx.beginPath();
-  ctx.moveTo(o.x + 37, o.y + 9); ctx.lineTo(o.x + 44, o.y + 11); ctx.lineTo(o.x + 37, o.y + 14);
-  ctx.closePath(); ctx.fill();
-  // Schwanz: zwei kleine gefaecherte Federn hinten.
-  ctx.beginPath();
-  ctx.moveTo(o.x + 7, o.y + 12); ctx.lineTo(o.x - 5, o.y + 7); ctx.lineTo(o.x + 3, o.y + 14);
+  ctx.moveTo(o.x + 3, o.y + 9); ctx.lineTo(o.x - 4, o.y + 11); ctx.lineTo(o.x + 3, o.y + 14);
   ctx.closePath(); ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(o.x + 7, o.y + 15); ctx.lineTo(o.x - 5, o.y + 19); ctx.lineTo(o.x + 3, o.y + 16);
+  ctx.moveTo(o.x + 33, o.y + 12); ctx.lineTo(o.x + 45, o.y + 7); ctx.lineTo(o.x + 37, o.y + 14);
   ctx.closePath(); ctx.fill();
-  drawBirdWing(o.x + 9, o.y + 13, flapAngle);
+  ctx.beginPath();
+  ctx.moveTo(o.x + 33, o.y + 15); ctx.lineTo(o.x + 45, o.y + 19); ctx.lineTo(o.x + 37, o.y + 16);
+  ctx.closePath(); ctx.fill();
+  drawBirdWing(o.x + 25, o.y + 13, flapAngle);
 }
 // Fluegel mit drei "Fingern" (Vorlage: echte Fledermaus-Anatomie - eine
 // Membran zwischen gespreizten Handknochen statt einer glatten Feder-

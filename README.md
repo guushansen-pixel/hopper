@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.25" -VersionCode 28 -Force
+              -VersionName "1.26" -VersionCode 29 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -953,3 +953,23 @@ z.B. "00500"/"HI 01000") und Level 2 (unskaliert, "HI 05000") direkt
 gegenuebergestellt; Autopilot-Soaks fuer Level 1 (4x, bis zu 2,5 Minuten
 oder Hoehlen-Uebergang) mit 0 Abstuerzen, keine Regression durch die
 neue Vogel-Zeichnung.
+
+## Vogel-Blickrichtung korrigiert (1.26)
+
+Rueckmeldung direkt nach 1.25: die Voegel fliegen "in die falsche
+Richtung". Kopf/Schnabel sassen rechts, Schwanz links - der Vogel
+bewegt sich aber (wie alle Hindernisse) mit dem Weltscroll nach links
+auf die Figur zu, sah also aus, als fliege er rueckwaerts. Beim alten
+Rechteck-Fluegel (vor 1.25) war das kaum sichtbar, mit dem neuen
+spitzen Dreiecks-Schnabel fiel es sofort auf.
+
+`drawBird()` horizontal gespiegelt: Kopf/Schnabel jetzt vorn links
+(Flugrichtung), Schwanzfedern hinten rechts, Fluegel-Drehpunkt
+entsprechend mitverschoben. Reine Koordinaten-Aenderung, `drawBirdWing()`
+selbst unangetastet. Die Fledermaus war davon nicht betroffen - ihre
+Schnauze zeigt nach unten, nicht seitlich, es gibt also keine Links/
+Rechts-Asymmetrie, die falsch herum sitzen koennte.
+
+Verifiziert: Screenshot mit drei Voegeln in unterschiedlichen Flap-
+Phasen - Schnabel zeigt jetzt in Bewegungsrichtung; Autopilot-Soak
+(9000 Frames) weiterhin 0 Abstuerze; kein Konsolenfehler.
