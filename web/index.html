@@ -828,9 +828,6 @@ function ceilingGapAt(worldX) {
 // auf 24% in einem Frame.
 var BIRD_START = 120, BIRD_RAMP = 280, BIRD_TARGET = 0.22;
 var SNAKE_START = 380, SNAKE_RAMP = 320, SNAKE_TARGET = 0.20;
-// Erst nach SNAKE_START (thematisch: "Schlangen-Gift"), niedrigere Zielrate
-// als die Schlangen selbst - ein Sondergeschoss, nicht der Regelfall.
-var POISON_START = 520, POISON_RAMP = 340, POISON_TARGET = 0.13;
 
 function rampChance(start, len, target) {
   if (state.score < start) { return 0; }
@@ -869,7 +866,7 @@ function newGame(attract) {
     mountainOn: false, mountainT: 0, mountainVis: 0,
     caveOn: startInCave, caveVis: startInCave ? 1 : 0,
     entering: false, enterT: 0, enterArchX: 0,
-    bonus: 0, dripIn: 60, crystalIn: 260, poisonQueued: false
+    bonus: 0, dripIn: 60, crystalIn: 260
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
@@ -909,73 +906,12 @@ function deathBurst(x, y) {
   }
 }
 
-// Zusaetzliche Schliessgeschwindigkeit fuers Geschoss - eigentlich sollte
-// ein "Schuss" schneller als state.speed sein, aber gemessen (siehe
-// Git-Historie/README): schon 45 zusaetzliche px/s druecken das minimale
-// Reaktionsfenster von 283ms (Basiswert, wie bei jedem anderen Hindernis)
-// auf 250ms und erzeugte in Soaks echte Treffer, obwohl der Automat den
-// Rest des Spiels bei 283ms durchgehend ueberlebt. Erster Implementierungs-
-// versuch hatte ausserdem einen echten Bug: die Bonusgeschwindigkeit wurde
-// ohne *dt addiert (~15000px/s statt 260px/s) - das Geschoss war praktisch
-// sofort da. 0 bleibt hier bewusst bei 0: die neongruene Optik (Glimmer +
-// Kometenschweif) und die auf die Spielerhaltung gezielte Flugbahn
-// (poisonTargetY()) tragen den "gezielter Schuss"-Eindruck bereits, ohne
-// zusaetzliches Tempo-Risiko einzugehen.
-var POISON_EXTRA = 0;
-// Zielbahn beim Abschuss einmalig aus der AKTUELLEN Haltung der Figur
-// abgeleitet, siehe Kommentar bei spawnObstacle(). Nur die beiden unteren
-// Hoehenstufen (Vogel-Hoehen: mittel=Ducken noetig, tief=Springen noetig) -
-// bewusst NIE die obere "ignorierbare" Vogel-Hoehe. Erster Versuch waehlte
-// die hohe Bahn, wenn die Figur beim Abschuss gerade in der Luft war ("dann
-// ist da oben ja sowieso niemand") - das stimmt aber nur im Sprungscheitel.
-// hits() zeigt: waehrend des Steig-/Fallteils eines Sprungs (runner.y
-// zwischen ca. -77 und -14) reicht die Kollisionsbox trotzdem in die obere
-// Bahn hinein. Da das Geschoss mehrere Sekunden unterwegs ist und die Figur
-// in der Zwischenzeit fuer ein GANZ ANDERES Hindernis erneut springen kann,
-// war "in der Luft = spaeter oben sicher" eine falsche Annahme - im
-// Soak-Test 2 von 10 Laeufen ein Treffer, obwohl das minimale
-// Reaktionsfenster dem sonst ueberall sicheren Basiswert entsprach. Mit nur
-// noch den beiden unteren, aktiv zu konternden Bahnen verlangt das Geschoss
-// immer eine bewusste Reaktion (ducken oder springen), nie ein "einfach
-// nichts tun" - dieselbe Klassifikation, die bei Voegeln fuer genau diese
-// zwei Bahnen bereits erprobt ist.
-function poisonTargetY() {
-  return runner.ducking ? groundY - 26 : groundY - 54;
-}
-
 // ======================================================== Hindernisse ======
 // Manche Zweige erzwingen einen Mindestabstand fuer den naechsten Spawn
 // (z.B. nach einem Stalaktiten) - dafuer wird ein Rueckgabewert genutzt,
 // den der Aufrufer statt obstacleGap() nimmt (siehe dort).
 function spawnObstacle() {
   if (state.mountainOn) { spawnRock(); return; }
-  // Gift-Ueberarbeitung (Korrektur): das Geschoss muss sichtbar VON EINER
-  // SCHLANGE kommen, nicht irgendwann unabhaengig auftauchen (Feedback: "die
-  // projektile fliegen nicht von den schlangen weg sondern irgendwann danach
-  // oder davor"). Ein wirklich unabhaengiger Zeitplan konnte beliebig weit
-  // vor oder nach jeder Schlange landen - keine erkennbare Verbindung. Fix:
-  // eine Schlange "queued" das Gift bei ihrem eigenen Spawn mit einem eigenen
-  // (erst zu klein, dann korrigiert - siehe Kommentar dort) erzwungenen
-  // Abstand statt der normalen obstacleGap(), und dieser Zweig hier loest es
-  // garantiert als NAECHSTES Hindernis aus. Optisch: das Gift spawnt am
-  // selben rechten Rand wie die Schlange kurz zuvor und bewegt sich danach
-  // mit derselben Geschwindigkeit (POISON_EXTRA=0) - es bleibt die ganze
-  // Zeit im festen Abstand HINTER der Schlange, wie ausgespuckt.
-  if (state.poisonQueued) {
-    state.poisonQueued = false;
-    obstacles.push({ kind: "poison", x: LW + 20, y: poisonTargetY(), w: 16, h: 16 });
-    for (var si = obstacles.length - 2; si >= 0; si--) {
-      if (obstacles[si].kind === "snake") {
-        var sHx = obstacles[si].x - 10, sHy = obstacles[si].y - 2;
-        for (var pi = 0; pi < 5; pi++) {
-          spawnParticle(sHx, sHy, -40 - Math.random() * 60, (Math.random() - 0.5) * 60,
-                        0.3 + Math.random() * 0.2, 1.6 + Math.random() * 2, "poison");
-        }
-        break;
-      }
-    }
-    return;
-  }
   // 0.22 war bemessen, als die Decke selbst noch mittoedlich war - seit die
   // Decke reine Optik ist (siehe Hoehle-Kommentar oben), sind Stalaktiten/
   // Tropfsteinsaeulen die einzige Hoehlen-eigene Gefahr und duerfen deutlich
@@ -1005,39 +941,6 @@ function spawnObstacle() {
     // sicher bis Breite 55, ab 58 trifft es. 42-52 haelt Abstand zur Grenze.
     var sw = 42 + Math.random() * 10;
     obstacles.push({ kind: "snake", x: LW + 20, y: groundY - 16, w: sw, h: 16 });
-    // Nur EINMAL pro Schlange die Chance auf Gift wuerfeln (queued, siehe
-    // oben) - keine eigene unabhaengige Zeitachse mehr dafuer. Erzwungener
-    // Abstand bis zum Gift statt der normalen obstacleGap(): erster Versuch
-    // nutzte 260-430 (klein, damit die Schlange bei LW~620 noch sichtbar
-    // ist) - Soak-Test mit Autopilot (echte Treffer-Zuordnung, nicht nur das
-    // Reaktionsfenster-Mass) zeigte aber 5 von 43 Gift-Treffern bei
-    // Hoechsttempo: der Autopilot reagiert pro Frame nur auf das NAECHSTE
-    // Hindernis (autoPilot()-Schleife bricht nach dem ersten passenden ab) -
-    // bei kleinem Abstand liegt der Sprung-Trigger der Schlange zeitlich zu
-    // nah am Duck/Sprung-Trigger des Gifts, und Letzteres wird dabei
-    // uebersprungen, bis es zu spaet ist. Da beide Objekte exakt dieselbe
-    // Schliessgeschwindigkeit haben (POISON_EXTRA=0), ist der zeitliche
-    // Abstand ihrer Trigger-Momente = Abstand/state.speed, unabhaengig vom
-    // Tempo selbst.
-    //
-    // Nutzerfeedback: "die Schlangen schiessen nicht" - Ursache war mit
-    // 600-750 tatsaechlich, dass die Schlange bei Hoechsttempo (960) laengst
-    // aus dem Bild gescrollt (x < -20, also entfernt) ist, BEVOR das Gift
-    // ueberhaupt am rechten Rand spawnt (640 - 675 im Schnitt = deutlich im
-    // Minus) - das "Schiessen" war fuer den Spieler dadurch praktisch nie
-    // sichtbar, obwohl es RNG-seitig korrekt passiert ist. Per Soak-Test im
-    // Browser (window.testGap-Methodik, 3x3600s je Wueste/Hoehle, echte
-    // Treffer-Zuordnung wie beim urspruenglichen Test) neu vermessen: der
-    // Sicherheitsabstand bricht zwischen 450-600 (noch 0 Gift-Treffer) und
-    // 350-500 (5 von ~300 Schlangen-Spawns in der Wueste trafen) zusammen -
-    // 500-650 liegt mit Puffer klar auf der sicheren Seite (0 Gift-Treffer
-    // in >3h simulierter Zeit je Modus) und bringt die Schlange bei
-    // Hoechsttempo wieder in den sichtbaren Bereich (640-650=-10 bis
-    // 640-500=140, statt vorher bis -100 im Minus).
-    if (Math.random() < rampChance(POISON_START, POISON_RAMP, POISON_TARGET)) {
-      state.poisonQueued = true;
-      return 500 + Math.random() * 150;
-    }
     return;
   }
   var tall = Math.random() < 0.45;
@@ -1147,13 +1050,12 @@ function autoPilot() {
     // Felsabschnitten wiederholt (127 von 135 Abstuerzen in 10 Minuten bei
     // zu enger Taktung, siehe README).
     var closingSpeed = state.speed + (o.kind === "rock" ? o.rollExtra : 0) +
-                        (o.kind === "bat" ? o.diveExtra : 0) +
-                        (o.kind === "poison" ? POISON_EXTRA : 0);
+                        (o.kind === "bat" ? o.diveExtra : 0);
     var tContact = (o.x - (RUNNER_X + 46)) / closingSpeed;
     var tPass    = (o.w + 50) / closingSpeed;
     var tTrigger = Math.max(0.05, (AIR_TIME - tPass) / 2);
     if (tContact > tTrigger + 0.25) { continue; }
-    if (o.kind === "bird" || o.kind === "bat" || o.kind === "poison") {
+    if (o.kind === "bird" || o.kind === "bat") {
       if (o.y <= groundY - 70) { continue; }
       want = (o.y <= groundY - 40) ? "duck" : "jump";
     } else if (o.kind === "stalactite" || o.kind === "pillar") {
@@ -1374,7 +1276,6 @@ function update(dt) {
       if (o.x - RUNNER_X < 260) { o.diveExtra = Math.min(150, o.diveExtra + dt * 300); }
       move = dx + o.diveExtra * dt;
     }
-    if (o.kind === "poison") { move = dx + POISON_EXTRA * dt; }
     o.x -= move;
     if (o.kind === "bird" || o.kind === "bat") { o.flap += dt * 10; }
     if (o.x + o.w < -20) { obstacles.splice(i, 1); continue; }
@@ -1707,9 +1608,9 @@ function drawParticles() {
     // theme.dust - dieselbe Begruendung wie ueberall sonst in der Hoehle:
     // theme.dust folgt dem Tag/Nacht-Zyklus, ein Tropfen soll immer gleich
     // aussehen.
-    ctx.globalAlpha = a * (p.c === "accent" || p.c === "poison" ? 1 : 0.62);
+    ctx.globalAlpha = a * (p.c === "accent" ? 1 : 0.62);
     ctx.fillStyle = (p.c === "accent") ? theme.accent
-      : (p.c === "drip") ? "#6fc3e0" : (p.c === "poison") ? "#39ff6a" : theme.dust;
+      : (p.c === "drip") ? "#6fc3e0" : theme.dust;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (0.35 + a * 0.65), 0, 6.2832); ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -2303,28 +2204,6 @@ function drawSnake(o) {
   ctx.fillStyle = theme.skyBot;
   rr(hx + 2, hy + 2, 3, 3, 1.5);
 }
-// Gift-Geschoss: neongruener Kern mit Glimmer-Halo und Kometenschweif nach
-// hinten (die Seite, aus der es kam - fliegt nach links, siehe POISON_EXTRA).
-function drawPoison(o) {
-  G = ctx;
-  var cx = o.x + o.w / 2, cy = o.y + o.h / 2;
-  var pulse = 0.85 + 0.15 * Math.sin(state.time * 10 + o.x * 0.1);
-  var glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, o.w * 1.5);
-  glow.addColorStop(0, "rgba(57,255,106,0.55)");
-  glow.addColorStop(1, "rgba(57,255,106,0)");
-  ctx.fillStyle = glow;
-  ctx.beginPath(); ctx.arc(cx, cy, o.w * 1.5, 0, 6.2832); ctx.fill();
-  ctx.fillStyle = "#1f8a3c";
-  ctx.beginPath();
-  ctx.moveTo(cx + o.w * 0.3, cy - o.h * 0.28); ctx.lineTo(cx + o.w * 1.4, cy);
-  ctx.lineTo(cx + o.w * 0.3, cy + o.h * 0.28);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#39ff6a";
-  ctx.beginPath(); ctx.arc(cx, cy, (o.w / 2) * pulse, 0, 6.2832); ctx.fill();
-  ctx.fillStyle = "#c8ffd8";
-  ctx.beginPath(); ctx.arc(cx - o.w * 0.14, cy - o.h * 0.14, o.w * 0.16, 0, 6.2832); ctx.fill();
-}
-
 // Leichte Vignette in der Hoehle - dunkelt nur die Ecken ab, der komplette
 // Spielbereich (wo Hindernisse erscheinen) bleibt hell genug, um alles
 // rechtzeitig zu sehen. Bewusst kein "Taschenlampenkegel" um die Figur: die
@@ -2419,7 +2298,6 @@ function render() {
     else if (ob.kind === "bat") { drawBat(ob); }
     else if (ob.kind === "rock") { drawRock(ob); }
     else if (ob.kind === "snake") { drawSnake(ob); }
-    else if (ob.kind === "poison") { drawPoison(ob); }
     else if (ob.kind === "stalactite") { drawStalactite(ob); }
     else if (ob.kind === "pillar") { drawPillar(ob); }
     else { drawCactus(ob); }
