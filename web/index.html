@@ -2674,9 +2674,29 @@ elLvlDesert.addEventListener("click", function () {
   refreshMenu();
   SFX.ui();
 });
+// Test-Trick: 5x schnell (< 1.5s) auf die gesperrte Level-2-Kachel tippen
+// schaltet die Hoehle frei, ohne erst auf Score 3000 spielen zu muessen -
+// ruft exakt dieselbe unlockCave() wie ein echter Levelabschluss auf, also
+// keine Sonderbehandlung/Balance-Aenderung, nur ein schnellerer Weg dorthin.
+var lvlCaveTaps = 0, lvlCaveTapAt = 0;
 elLvlCave.addEventListener("click", function () {
   audioInit();
-  if (!caveUnlocked || settings.startCave) { return; }
+  if (!caveUnlocked) {
+    var now = Date.now();
+    if (now - lvlCaveTapAt > 1500) { lvlCaveTaps = 0; }
+    lvlCaveTapAt = now;
+    lvlCaveTaps++;
+    if (lvlCaveTaps >= 5) {
+      lvlCaveTaps = 0;
+      unlockCave();
+      settings.startCave = true;
+      saveJson(SET_KEY, settings);
+      refreshMenu();
+      SFX.equip();
+    }
+    return;
+  }
+  if (settings.startCave) { return; }
   settings.startCave = true;
   saveJson(SET_KEY, settings);
   refreshMenu();
