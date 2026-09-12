@@ -61,6 +61,7 @@ func _init() -> void:
     print("=== Godot-Sim: Soak-Test (%.0fs, seed=%d, cave=%s) ===" % [seconds, seed_value, str(cave)])
     var soak := _soak(seconds, seed_value, cave)
     print("Sekunden simuliert: %.1f" % soak.seconds)
+    print("Wueste 'geschafft' (Neustarts, kein Tod): %d" % soak.cleared_count)
     print("Tode gesamt:        %d" % soak.deaths)
     print("Tode nach Art:      %s" % str(soak.deaths_by_kind))
     print("Hindernisse gesamt nach Art: %s" % str(soak.spawn_counts))
@@ -143,6 +144,7 @@ func _soak(seconds: float, seed_value: int, cave: bool) -> Dictionary:
     var dt := 1.0 / 60.0
     var t := 0.0
     var deaths := 0
+    var cleared_count := 0
     var deaths_by_kind := {}
     var spawn_counts := {}
     var death_log := []
@@ -189,8 +191,17 @@ func _soak(seconds: float, seed_value: int, cave: bool) -> Dictionary:
                 })
             sim.reset()
             sim.cave_on = cave
+        elif sim.cleared:
+            # Wueste bei CAVE_START "geschafft" (siehe hopper_sim.gd) - kein
+            # Tod, aber step() ist ab jetzt ein No-Op; fuer den Soak-Test
+            # einfach neu starten, damit der restliche Zeitraum weiter
+            # sinnvoll Hindernisse/Fairness prueft statt leerzulaufen.
+            cleared_count += 1
+            sim.reset()
+            sim.cave_on = cave
     return {
         "seconds": t, "deaths": deaths, "deaths_by_kind": deaths_by_kind,
+        "cleared_count": cleared_count,
         "spawn_counts": spawn_counts, "min_window": min_window, "death_log": death_log,
     }
 

@@ -1,41 +1,35 @@
-extends SceneTree
+extends Node
 
-const GameView = preload("res://scripts/game_view.gd")
-const HopperSim = preload("res://scripts/hopper_sim.gd")
+const App = preload("res://scripts/app.gd")
 
-var view
+var app
 
-func _init() -> void:
-    view = GameView.new()
-    root.add_child(view)
-    view.bot_mode = true
+func _ready() -> void:
+    app = App.new()
+    add_child(app)
 
-func _process(_delta: float) -> bool:
+func _process(_delta: float) -> void:
     var f := Engine.get_process_frames()
-    if f == 5:
-        # Wueste-Frame mit sichtbaren Hindernissen erzwingen (statt auf
-        # Zufalls-Spawn zu warten) - fuer eine verlaessliche Momentaufnahme.
-        view.sim.obstacles = [
-            {"kind": "cactus", "x": 300.0, "y": HopperSim.GROUND_Y - 36.0, "w": 34.0, "h": 36.0, "count": 2},
-            {"kind": "bird", "x": 480.0, "y": HopperSim.GROUND_Y - 80.0, "w": 38.0, "h": 26.0},
-        ]
     if f == 10:
-        root.get_texture().get_image().save_png("res://tests/screenshot_desert.png")
-        view.sim.cave_on = true
-    if f == 15:
-        # Hoehle: Kristall-Kaktus + Gift-Geschoss (beide Duck-Bahn und
-        # Sprung-Bahn) + Tropfstein sichtbar erzwingen.
-        view.sim.obstacles = [
-            {"kind": "cactus", "x": 260.0, "y": HopperSim.GROUND_Y - 36.0, "w": 34.0, "h": 36.0, "count": 2},
-            {"kind": "poison", "x": 420.0, "y": HopperSim.GROUND_Y - 54.0, "w": 16.0, "h": 16.0},
-            {"kind": "stalactite", "x": 560.0, "y": 40.0, "w": 34.0, "h": 120.0},
-        ]
+        app._show("wardrobe")
     if f == 20:
-        root.get_texture().get_image().save_png("res://tests/screenshot_cave.png")
-    if f == 21:
-        view._burst_dust(Vector2(150.0, HopperSim.GROUND_Y))
-    if f == 24:
-        root.get_texture().get_image().save_png("res://tests/screenshot_dust.png")
-        quit()
-        return true
-    return false
+        get_viewport().get_texture().get_image().save_png("res://tests/screenshot_wardrobe.png")
+        # Etwas anziehen, damit die Garderobe sichtbar etwas veraendert.
+        Save.look["shape"] = "cat"
+        Save.look["color"] = "violet"
+        Save.look["hat"] = "top"
+    if f == 30:
+        app._show("settings")
+    if f == 40:
+        get_viewport().get_texture().get_image().save_png("res://tests/screenshot_settings.png")
+        app._play(false)
+    if f == 100:
+        get_viewport().get_texture().get_image().save_png("res://tests/screenshot_game.png")
+        app.game_view.frozen = true
+        app._show("paused")
+    if f == 110:
+        get_viewport().get_texture().get_image().save_png("res://tests/screenshot_paused.png")
+        app._show_over(false, false, 1234, true)
+    if f == 120:
+        get_viewport().get_texture().get_image().save_png("res://tests/screenshot_over.png")
+        get_tree().quit()

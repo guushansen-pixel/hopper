@@ -16,6 +16,11 @@ const AudioSynth = preload("res://scripts/audio_synth.gd")
 # Sim-unabhaengigen Szene, gehoert hier rein wie bei Sfx generell.
 var cave_on := false
 
+# Phase 6: Einstellungen-Toggle "Soundeffekte" (app.gd/Save.settings.sfx) -
+# hier statt in jedem Aufrufer geprueft, damit "aus" wirklich alles stumm
+# schaltet, ohne jede der 8 Sound-Funktionen einzeln zu bewachen.
+var sfx_enabled := true
+
 const POOL_SIZE := 8
 var _players: Array[AudioStreamPlayer] = []
 var _next_player := 0
@@ -47,6 +52,8 @@ func _ready() -> void:
         _players.append(p)
 
 func _play(name: String, scale: float = 1.0) -> void:
+    if not sfx_enabled:
+        return
     var p := _players[_next_player]
     _next_player = (_next_player + 1) % POOL_SIZE
     p.stream = _clip[name]

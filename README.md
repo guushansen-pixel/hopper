@@ -179,6 +179,48 @@ Bytegroessen-/Fehlerfreiheits-Pruefung verifiziert (korrekte Sample-Anzahl,
 kein Absturz beim echten Abspielen), nicht per Gehoer. Rueckmeldung vom
 User noetig, ob sich das auf dem Geraet gut anhoert.
 
+**Phase 6 (Garderobe/Menues/Persistenz/Attract-Modus-UI)**: fertig.
+Neue Schicht `scripts/app.gd` (Screen-/Menue-Zustandsmaschine: menu/
+wardrobe/settings/paused/over/game), sitzt strikt ueber `game_view.gd`
+(das nichts von Bildschirmen/Menues weiss) und steuert es nur ueber dessen
+oeffentliche API/Signale. `scripts/save_data.gd` (Autoload "Save")
+persistiert Highscores (Wueste/Hoehle getrennt), Einstellungen (Musik/SFX/
+Shake/Tageszyklus/Start-in-Hoehle) und Garderobe (Form/Farbe/Hut) als JSON
+unter `user://save.json`. **Bewusste Produktentscheidung**: keine Migration
+alter WebView-`localStorage`-Spielstaende - anderes Paket, andere Speicher-
+form, fuer ein paar Ganzzahlen nicht lohnend (User-Entscheidung, nicht
+stillschweigend festgelegt).
+
+Dabei einen echten Modellierungsfehler aus Phase 3 korrigiert: die Wueste
+ging bisher nahtlos/automatisch in die Hoehle ueber (`cave_on` wurde einfach
+bei Erreichen von `CAVE_START` umgeflippt). Im JS-Original endet die Wueste
+dort stattdessen distinkt ("Level geschafft", `completeLevel()`), und die
+Hoehle ist ein SEPARATER Lauf mit zurueckgesetztem Tempo/Score. Jetzt hat
+`hopper_sim.gd` ein `cleared`-Feld (analog zu `dead`, `step()` haelt darauf
+an), `game_view.gd` sendet ein `cleared`-Signal, `app.gd` zeigt einen
+eigenen "Level geschafft"-Bildschirm (statt Game Over) und schaltet die
+Hoehle frei (`Save.unlock_cave()`).
+
+Zwei echte Bugs beim Schreiben gefunden und behoben (nicht erst beim
+Testen): (1) `LOOK_COLORS["auto"]` ist absichtlich `null` - eine direkte
+Zuweisung in eine `Color`-typisierte Variable haette bei "auto"-Farbe zum
+Absturz gefuehrt, gefixt durch einen Zwischenschritt mit expliziter
+Null-Pruefung. (2) `_show()` setzte `frozen` anfangs unbedingt auf `false`,
+was den laufenden Lauf faelschlich entpausiert haette, sobald man aus den
+Einstellungen zurueck zur Pause navigiert - jetzt `frozen = (name ==
+"paused")`.
+
+Verifiziert: Regressions-Soak (1800s Wueste, 900s Hoehle) bestaetigt, dass
+der neue `cleared`-Mechanismus die Fairness nicht veraendert (28
+"geschafft"-Ereignisse + nur 3 Tode in der Wueste, 0 Tode in der Hoehle -
+im Rahmen der bisherigen Werte). Echter Bootstrap-Lauf
+(`godot --path godot --quit-after 200`, keine Autoload-Compile-Fehler) und
+eine visuelle Pruefung aller 6 Bildschirme per Screenshot-Trick (Menue,
+Garderobe, Einstellungen, laufendes Spiel, Pause, Game Over/"geschafft")
+zeigen korrektes Layout, lesbaren Text und richtige dynamische Inhalte
+(Sperrzustand des Hoehlen-Buttons, "Neuer Rekord!"-Anzeige, Button-Text-
+Wechsel je nach Kontext).
+
 ## Bauen
 
 ```powershell

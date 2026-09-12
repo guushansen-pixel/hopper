@@ -112,8 +112,14 @@ func score() -> float:
 var speed := SPEED_START
 var spawn_in := 90.0
 var dead := false
+# Wueste (cave_on=false) endet bei CAVE_START mit "geschafft", nicht mit dem
+# Tod - wortgleiches Prinzip zu completeLevel() in web/index.html. Wird wie
+# "dead" behandelt (step() haelt an), app.gd (Phase 6) reagiert auf beide
+# Signale unterschiedlich (Game-Over-Bildschirm vs. "Level geschafft" mit
+# Uebergang in einen NEUEN Hoehlen-Lauf statt nahtlosem Weiterspielen).
+var cleared := false
 
-var cave_on := false          # Phase 3 schaltet das ueber den Level-Uebergang
+var cave_on := false          # von app.gd beim Start eines Laufs gesetzt
 var mountain_on := false
 var mountain_t := 0.0
 var next_mountain_at := 0.0
@@ -140,6 +146,7 @@ func reset() -> void:
     speed = SPEED_START
     spawn_in = 90.0
     dead = false
+    cleared = false
     mountain_on = false
     mountain_t = 0.0
     next_mountain_at = 700.0 + rng.randf() * 200.0
@@ -150,13 +157,21 @@ func reset() -> void:
 
 # ============================================================ Ein Tick =====
 func step(dt: float, bot_mode: bool = true) -> void:
-    if dead:
+    if dead or cleared:
         return
 
     speed = min(SPEED_MAX, speed + SPEED_RAMP * dt)
     var dx := speed * dt
     distance += dx
     scroll_ceiling += dx
+
+    # Wueste -> "Level geschafft" (kein Tod, kein nahtloser Uebergang - siehe
+    # Kommentar bei "cleared" oben). Bewusst VOR dem Rest des Ticks geprueft,
+    # damit ein Frame, der die Schwelle ueberschreitet, keine weiteren
+    # Hindernisse mehr spawnt/bewegt.
+    if not cave_on and score() >= CAVE_START:
+        cleared = true
+        return
 
     # ------------------------------------------------- Bergabschnitte -------
     if mountain_on:

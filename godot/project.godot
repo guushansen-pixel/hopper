@@ -37,3 +37,7 @@ viewport/hdr_2d=true
 ; game_view.gd haelt eine eigene music.gd-Instanz, da nur eine Szene sie
 ; braucht.
 Sfx="*res://scripts/sfx.gd"
+
+; Phase 6: Persistenz (Highscores/Einstellungen/Garderobe) unter user://,
+; siehe scripts/save_data.gd.
+Save="*res://scripts/save_data.gd"

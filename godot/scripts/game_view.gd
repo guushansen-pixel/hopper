@@ -1,12 +1,15 @@
-# Phase 3: verbindet die reine Simulation (hopper_sim.gd) erstmals mit
-# Rendering + echter Spielereingabe. Bewusst noch schlichte Formen/Farben
-# statt Kunst - Grafik-Feinschliff (Glow/Partikel) ist Phase 4, Menues/
-# Game-Over-UI sind eine spaetere Phase. Ziel hier: das erste tatsaechlich
-# ANSPIELBARE Ding, mit korrekter Physik/Kollision (siehe hopper_sim.gd,
-# in Phase 1+2 bereits per Kopflos-Soak verifiziert).
+# Verbindet die reine Simulation (hopper_sim.gd) mit Rendering + echter
+# Spielereingabe. Bewusst schlichte Formen/Farben statt Kunst. Bildschirm-
+# Zustand (Menue/Pause/Game-Over/...) und Persistenz gehoeren NICHT hierher,
+# sondern zu scripts/app.gd (Phase 6), das dieses Node2D als Kind haelt und
+# ueber bot_mode/frozen/das "died"-Signal steuert - GameView weiss selbst
+# nichts von Bildschirmen, genau wie hopper_sim.gd nichts vom Rendering weiss.
 extends Node2D
 
 const HopperSim = preload("res://scripts/hopper_sim.gd")
+
+signal died
+signal cleared   # Wueste bei CAVE_START erreicht (siehe hopper_sim.gd) - kein Tod
 
 # Farbschema Wueste/Hoehle - vereinfachte Variante von CAVE_SKY_TOP/BOT/ROCK
 # aus web/index.html (kein Tag/Nacht-Zyklus, das ist eine spaetere Phase).
@@ -24,12 +27,14 @@ const Music = preload("res://scripts/music.gd")
 
 var sim: HopperSim
 var bot_mode := false
+var frozen := false            # Pause (Phase 6, von app.gd gesetzt) - Sim haelt an, Rendering laeuft weiter
 var touch_duck_held := false   # siehe _handle_input()/_input() - einzige Ducken-Quelle fuer Touch
 var was_on_ground := true      # fuer Sprung-/Landestaub + Sprung-/Land-SFX, siehe _physics_process()
 var was_ducking := false       # fuer Duck-SFX (nur auf der steigenden Flanke)
 var last_score_hundred := 0    # fuer Punkte-SFX, wortgleich zu web/index.html: Sound bei jeder vollen 100er-Schwelle
 var dust_particles: GPUParticles2D
 var music: Music
+var music_enabled_setting := true   # Phase 6: Save.settings.music, von app.gd gehalten
 
 func _ready() -> void:
     sim = HopperSim.new()
@@ -98,8 +103,8 @@ func _burst_dust(pos: Vector2) -> void:
     dust_particles.emitting = true
 
 func _physics_process(delta: float) -> void:
-    if sim.dead:
-        return  # step() no-opt bei dead - Neustart uebernimmt _on_death_timeout()
+    if sim.dead or sim.cleared or frozen:
+        return  # step() no-op bei dead/cleared/pausiert - app.gd entscheidet, was als naechstes passiert
     if bot_mode:
         sim.step(delta, true)
     else:
@@ -131,31 +136,35 @@ func _physics_process(delta: float) -> void:
         Sfx.point()
     last_score_hundred = cur_hundred
 
-    # Wueste -> Hoehle: vereinfachter, sofortiger Uebergang (kein Cutscene-
-    # Wipe/Torbogen wie im Original - das ist reine Optik, spaetere Phase).
-    if not sim.cave_on and sim.score() >= HopperSim.CAVE_START:
-        sim.cave_on = true
     Sfx.cave_on = sim.cave_on
 
     # Musik nur bei echter Spielersteuerung (wie im Original: nicht im
     # Attract-/Bot-Modus) - einmalig starten/stoppen, nicht jeden Frame neu
     # (das wuerde den Sequencer-Schritt jedesmal auf 0 zuruecksetzen).
-    if bot_mode and music.enabled:
+    var want_music := (not bot_mode) and music_enabled_setting
+    if not want_music and music.enabled:
         music.stop()
-    elif not bot_mode and not music.enabled:
+    elif want_music and not music.enabled:
         music.start()
 
     if sim.dead:
         Sfx.die()
-        _on_death()
+        died.emit()   # app.gd faengt das ab und zeigt den Game-Over-Bildschirm
+    elif sim.cleared:
+        cleared.emit()   # app.gd faengt das ab und zeigt "Level geschafft"
 
     queue_redraw()
 
-func _on_death() -> void:
-    await get_tree().create_timer(0.6).timeout
-    var keep_cave := sim.cave_on
+# Startet einen frischen Lauf - von app.gd beim Druecken von "Spielen"
+# aufgerufen (Menue-Level-Wahl uebergibt cave_on).
+func start_new_run(cave: bool) -> void:
     sim.reset()
-    sim.cave_on = keep_cave
+    sim.cave_on = cave
+    Sfx.cave_on = cave
+    was_on_ground = sim.on_ground
+    was_ducking = sim.ducking
+    last_score_hundred = 0
+    touch_duck_held = false
 
 # =============================================================== Eingabe ===
 # Ducken hat ZWEI Quellen (Tastatur, dauerhaft abgefragt; Touch, per Event in
@@ -181,8 +190,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
             elif not ke.pressed:
                 if not bot_mode:
                     sim.end_jump()
-        elif ke.keycode == KEY_B and ke.pressed and not ke.echo:
-            bot_mode = not bot_mode
 
 func _input(event: InputEvent) -> void:
     if event is InputEventScreenTouch:
@@ -296,18 +303,79 @@ func _draw_crystal(x: float, y: float, w: float, h: float) -> void:
     draw_colored_polygon(body, Color(0.4, 0.7, 2.6))
     draw_line(Vector2(cx, y), Vector2(cx, y + h), Color(1.0, 1.4, 3.0, 0.8), 1.5)
 
+# Garderobe (Phase 6, siehe Save.look/scripts/ui.gd): Farbe faerbt den
+# Koerper, "shape" veraendert Ohren/Schwanz-Andeutung, "hat" zeichnet einen
+# Hut auf den Kopf - bewusst schlicht (Formen, keine Kunst), aber alle drei
+# Achsen aus web/index.html sind vertreten (3 Formen, 8 Farben, 5 Huete).
+const LOOK_COLORS := {
+    "auto": null, "terra": Color("#e4703a"), "teal": Color("#2a9d8f"),
+    "violet": Color("#7c6bd9"), "amber": Color("#dfa22b"), "rose": Color("#dc5a78"),
+    "green": Color("#4c9a5a"), "blue": Color("#4a90d9"),
+}
+
 func _draw_runner() -> void:
     var w: float = HopperSim.DUCK_W if sim.ducking else HopperSim.RUNNER_W
     var h: float = HopperSim.DUCK_H if sim.ducking else HopperSim.RUNNER_H
     var top := HopperSim.GROUND_Y - h + sim.runner_y
-    draw_rect(Rect2(Vector2(HopperSim.RUNNER_X, top), Vector2(w, h)), RUNNER_COLOR)
+    # WICHTIG: LOOK_COLORS["auto"] ist absichtlich null (Variant) - eine
+    # Color-typisierte Variable darf NIE null zugewiesen bekommen (Absturz),
+    # deshalb hier zuerst untypisiert abholen und erst danach in Color casten.
+    var body_color_raw = LOOK_COLORS.get(Save.look.get("color", "auto"), RUNNER_COLOR)
+    var body_color: Color = body_color_raw if body_color_raw != null else RUNNER_COLOR
+    draw_rect(Rect2(Vector2(HopperSim.RUNNER_X, top), Vector2(w, h)), body_color)
+
+    if not sim.ducking:
+        _draw_ears(String(Save.look.get("shape", "dog")), top, w, body_color)
+    _draw_hat(String(Save.look.get("hat", "none")), top, w)
+
     # Auge, damit Blickrichtung/"vorne" erkennbar ist.
     draw_circle(Vector2(HopperSim.RUNNER_X + w - 8.0, top + 10.0), 3.0, INK)
+
+func _draw_ears(shape: String, top: float, w: float, body_color: Color) -> void:
+    var base := Vector2(HopperSim.RUNNER_X + w * 0.65, top)
+    match shape:
+        "cat":
+            draw_colored_polygon(PackedVector2Array([
+                base + Vector2(-6, 0), base + Vector2(-1, -12), base + Vector2(4, 0),
+            ]), body_color)
+            draw_colored_polygon(PackedVector2Array([
+                base + Vector2(2, 0), base + Vector2(7, -12), base + Vector2(12, 0),
+            ]), body_color)
+        "bunny":
+            draw_rect(Rect2(base + Vector2(-6, -22), Vector2(5, 22)), body_color)
+            draw_rect(Rect2(base + Vector2(4, -22), Vector2(5, 22)), body_color)
+        _:  # "dog" - Schlappohr
+            draw_colored_polygon(PackedVector2Array([
+                base + Vector2(-4, -2), base + Vector2(-10, -14), base + Vector2(-2, -10),
+            ]), body_color)
+
+func _draw_hat(hat: String, top: float, w: float) -> void:
+    var hx := HopperSim.RUNNER_X + w * 0.25
+    match hat:
+        "cap":
+            draw_rect(Rect2(Vector2(hx, top - 6.0), Vector2(w * 0.6, 6.0)), Color(0.2, 0.2, 0.25))
+        "top":
+            draw_rect(Rect2(Vector2(hx + 2.0, top - 16.0), Vector2(w * 0.4, 16.0)), Color(0.12, 0.12, 0.15))
+            draw_rect(Rect2(Vector2(hx - 4.0, top - 2.0), Vector2(w * 0.5, 3.0)), Color(0.12, 0.12, 0.15))
+        "band":
+            draw_rect(Rect2(Vector2(hx, top + 2.0), Vector2(w * 0.6, 3.0)), Color(0.8, 0.2, 0.3))
+        "goggles":
+            draw_circle(Vector2(hx + 3.0, top + 8.0), 4.0, Color(0.6, 0.8, 0.9, 0.85))
+            draw_circle(Vector2(hx + 12.0, top + 8.0), 4.0, Color(0.6, 0.8, 0.9, 0.85))
+        _:
+            pass  # "none"
+
+# Wortgleich zu pctScore()/fmtScore() in web/index.html: in der Wueste
+# Prozent-Fortschritt bis CAVE_START (Geometry-Dash-Stil), in der Hoehle
+# roher, 5-stellig gepolsterter Punktestand.
+static func fmt_score(raw: float, cave: bool) -> String:
+    if cave:
+        return "%05d" % int(raw)
+    var pct: int = int(min(100.0, floor(raw / HopperSim.CAVE_START * 100.0)))
+    return "%d%%" % pct
 
 func _draw_hud() -> void:
     var f := ThemeDB.fallback_font
     var ink: Color = INK_ON_CAVE if sim.cave_on else INK
-    var txt := "%d" % int(sim.score())
+    var txt := fmt_score(sim.score(), sim.cave_on)
     draw_string(f, Vector2(16.0, 28.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, ink)
-    if bot_mode:
-        draw_string(f, Vector2(16.0, 52.0), "BOT (B zum Umschalten)", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ink)
