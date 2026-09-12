@@ -828,6 +828,9 @@ function ceilingGapAt(worldX) {
 // auf 24% in einem Frame.
 var BIRD_START = 120, BIRD_RAMP = 280, BIRD_TARGET = 0.22;
 var SNAKE_START = 380, SNAKE_RAMP = 320, SNAKE_TARGET = 0.20;
+// Seltene, rein kosmetische Farbvariante (siehe drawSnake()) - keine eigene
+// Mechanik, daher ohne Fairness-Bezug fix statt rampChance-gesteuert.
+var SNAKE_RARE_CHANCE = 0.08;
 
 function rampChance(start, len, target) {
   if (state.score < start) { return 0; }
@@ -940,7 +943,11 @@ function spawnObstacle() {
     // Schlange: niedrig und breit statt hoch und schmal. Vermessen:
     // sicher bis Breite 55, ab 58 trifft es. 42-52 haelt Abstand zur Grenze.
     var sw = 42 + Math.random() * 10;
-    obstacles.push({ kind: "snake", x: LW + 20, y: groundY - 16, w: sw, h: 16 });
+    // Seltene giftgruene Glanz-Variante - rein optisch (SNAKE_RARE_CHANCE),
+    // dieselbe Hitbox/Geschwindigkeit/kein Sonderverhalten wie jede andere
+    // Schlange, siehe drawSnake().
+    obstacles.push({ kind: "snake", x: LW + 20, y: groundY - 16, w: sw, h: 16,
+                     rare: Math.random() < SNAKE_RARE_CHANCE });
     return;
   }
   var tall = Math.random() < 0.45;
@@ -2193,14 +2200,38 @@ function drawCrystal(o) {
 // Kante, die Schlange wirkte dadurch wie rueckwaerts/falschherum kriechend
 // (Nutzerfeedback: "bewegen sich in die falsche Richtung").
 function drawSnake(o) {
-  G = ctx; ctx.fillStyle = theme.ground;
+  G = ctx;
   var segs = 5, sw = o.w / segs, t = state.time * 6;
+  if (o.rare) {
+    // Seltene giftgruene Glanz-Variante - rein optisch, dieselbe Hitbox/
+    // Bewegung/kein Sonderverhalten wie jede normale Schlange (siehe
+    // SNAKE_RARE_CHANCE). Weicher pulsierender Aussenschein (dieselbe
+    // Technik wie drawCrystalGlow()) plus eine helle Glanzlinie je Segment
+    // fuer den "stark glaenzend"-Eindruck.
+    var pulse = 0.75 + 0.25 * Math.sin(state.time * 5 + o.x * 0.08);
+    var glow = ctx.createRadialGradient(o.x + o.w * 0.5, o.y + o.h * 0.5, 0,
+                                         o.x + o.w * 0.5, o.y + o.h * 0.5, o.w * 0.75);
+    glow.addColorStop(0, "rgba(57,255,106," + (0.30 * pulse).toFixed(3) + ")");
+    glow.addColorStop(1, "rgba(57,255,106,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(o.x + o.w * 0.5, o.y + o.h * 0.5, o.w * 0.75, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = "#22e06b";
+  } else {
+    ctx.fillStyle = theme.ground;
+  }
   for (var i = 0; i < segs; i++) {
     var wob = Math.sin(t + i * 0.9) * 2;
     rr(o.x + i * sw, o.y + o.h * 0.3 + wob, sw + 2, o.h * 0.55, o.h * 0.3);
   }
   var hx = o.x - 10, hy = o.y - 2 + Math.sin(t + segs * 0.9) * 2;
   rr(hx, hy, 14, o.h * 0.75, o.h * 0.35);
+  if (o.rare) {
+    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    for (var i2 = 0; i2 < segs; i2++) {
+      var wob2 = Math.sin(t + i2 * 0.9) * 2;
+      rr(o.x + i2 * sw + sw * 0.18, o.y + o.h * 0.24 + wob2, sw * 0.5, 2.2, 1.1);
+    }
+  }
   ctx.fillStyle = theme.skyBot;
   rr(hx + 2, hy + 2, 3, 3, 1.5);
 }
