@@ -49,6 +49,42 @@ Mechanismus versucht ein Skript mit Parse-Fehler endlos neu zu kompilieren,
 statt sauber abzubrechen). Immer explizite `: float =`/`float(...)`
 verwenden, nie `:=`, wenn ein Dictionary-Feld beteiligt ist.
 
+**Phase 2 (restliche Hindernisse + volles Spawn-/Dichte-System)**: fertig.
+`hopper_sim.gd` erweitert um Vogel (3 Hoehenbahnen), Schlange+Gift-Kopplung
+(mit dem bereits im WebView-Original verifizierten 600-750-Zwangsabstand),
+Felsen (Bergabschnitte, `rollExtra`-Beschleunigung), Tropfstein/-saeule
+(Hoehlendecke als reine Sinuswelle, `cave_on`-Flag), sowie den kompletten
+`spawnObstacle()`-Dispatcher samt Prioritaetsreihenfolge und der
+"Forced-Gap"-Konvention (Rueckgabewert statt normaler `obstacleGap()`).
+
+**Wichtige Korrektur dabei gefunden**: Phase 1 hatte `score` faelschlich mit
+der rohen, kontinuierlichen Distanz gleichgesetzt. Im JS-Original ist
+`state.score = floor(state.distance/14) + state.bonus` - eine ABGELEITETE,
+14x langsamer wachsende Groesse, gegen die ALLE Schwellenwerte (Vogel/
+Schlange/Gift-Start, CAVE_START, Dichtefaktor) verglichen werden. Ohne die
+Korrektur waere in Phase 2 z.B. `CAVE_START=3000` nach Sekunden statt nach
+einem ganzen Level "erreicht" gewesen. Jetzt: `distance` ist der gespeicherte
+Rohwert, `score()` eine abgeleitete Funktion - wortgleich zum JS-Original.
+
+**Dritte GDScript-Falle**: `min()`/`max()` sind generische Builtins und geben
+bei `:=`-Deklaration ebenfalls einen nicht inferierbaren Variant-Typ zurueck
+(exakt derselbe stille Haenger wie bei Dictionary-Feldern) - auch hier immer
+`: float =` statt `:=`.
+
+**Soak-Ergebnis (voller Mix, siehe `godot/tests/soak_test.gd`)**: der in
+Phase 1 isolierte Kaktus-Dichte-Fund bestaetigt sich als Ursache, aber die
+tatsaechliche Rate faellt mit dem vollen Hindernis-Mix auf 20-22 Tode pro
+1800 simulierten Sekunden (zwei Seeds, ausschliesslich bei Hoechsttempo
+960, ueberwiegend Kaktus) - das liegt innerhalb der historisch akzeptierten
+Rate des JS-Originals ("2-9 Abstuerze pro 5 Minuten" als Normalfall, siehe
+Fledermaus-Wobble-Bug 1.24 weiter oben in diesem Dokument). Hoehlen-Modus
+(`cave_on=true`): **0 Tode in 1800s** bei allen 6 Hindernisarten inkl.
+Tropfstein/-saeule - dort gilt die 0.72-Dichte-Untergrenze nicht (nur
+ausserhalb der Hoehle), was die Diagnose zusaetzlich stuetzt. Bewertung:
+keine neue Regression durch die Portierung, sondern eine bereits im
+JS-Original akzeptierte Grundrate, die in der Kaktus-Monokultur von Phase 1
+nur ueberproportional sichtbar wurde.
+
 ## Bauen
 
 ```powershell
