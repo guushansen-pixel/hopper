@@ -85,6 +85,33 @@ keine neue Regression durch die Portierung, sondern eine bereits im
 JS-Original akzeptierte Grundrate, die in der Kaktus-Monokultur von Phase 1
 nur ueberproportional sichtbar wurde.
 
+**Phase 3 (Rendering + echte Steuerung)**: fertig - **das erste tatsaechlich
+spielbare Godot-Build**. `godot/scripts/game_view.gd` verbindet `hopper_sim.gd`
+erstmals mit echtem Rendering (`_draw()`, schlichte Formen/Farben statt
+Kunst - Grafik-Feinschliff ist Phase 4) und echter Eingabe (Tastatur:
+Leertaste/Hoch/W springen inkl. `JUMP_CUT`-Kurztipp-Verhalten, Runter/S
+ducken; Touch: oberes Drittel tippen = springen, unteres Drittel halten =
+ducken, analog zum Original). Wueste/Hoehle wechseln automatisch bei
+Erreichen von `CAVE_START` (vereinfacht: sofortiger Wechsel statt der
+Cutscene/Torbogen-Optik aus dem Original - das ist reine Optik, spaeter
+nachrollbar). `rockNoise()` (deterministische Ganzzahl-Hash-Funktion fuers
+Nicht-Schwimmen von Hoehlentexturen beim Scrollen) ist portiert, aber noch
+nicht fuer Detailtexturen verdrahtet - das kommt mit dem Grafik-Feinschliff
+in Phase 4.
+
+Zur Selbstverifikation (ich kann kein natives Fenster sehen): ein Kopflos-
+JA-aber-mit-echtem-Rendering-Trick - `godot --path <projekt> -s
+res://tests/screenshot_test.gd` (ohne `--headless`, das deaktiviert die
+GPU-Rendering-Pipeline komplett) laesst das Spiel ein paar hundert Frames
+laufen und speichert `get_viewport().get_texture().get_image()` als PNG.
+Damit direkt einen echten, kleinen Darstellungsfehler gefunden: die
+HUD-Schrift war in der Hoehle dunkel auf dunklem Himmel praktisch
+unsichtbar (fixed: heller Kontrastwert, wenn `cave_on`). Ausserdem verifiziert:
+`jump()`/`end_jump()` (neue, echte Spieler-Eingabe-API neben dem bisherigen
+internen Bot-Pfad) reproduzieren exakt die im JS-Original dokumentierten
+Sprunghoehen (voller Sprung ~120, kuerzester Tipp ~65 - Basiswert im
+JS-Kommentar: "kuerzester Tipp erreicht 65").
+
 ## Bauen
 
 ```powershell
