@@ -966,7 +966,7 @@ function spawnObstacle() {
     obstacles.push({ kind: "poison", x: LW + 20, y: poisonTargetY(), w: 16, h: 16 });
     for (var si = obstacles.length - 2; si >= 0; si--) {
       if (obstacles[si].kind === "snake") {
-        var sHx = obstacles[si].x + obstacles[si].w - 4, sHy = obstacles[si].y - 2;
+        var sHx = obstacles[si].x - 10, sHy = obstacles[si].y - 2;
         for (var pi = 0; pi < 5; pi++) {
           spawnParticle(sHx, sHy, -40 - Math.random() * 60, (Math.random() - 0.5) * 60,
                         0.3 + Math.random() * 0.2, 1.6 + Math.random() * 2, "poison");
@@ -1018,15 +1018,25 @@ function spawnObstacle() {
     // uebersprungen, bis es zu spaet ist. Da beide Objekte exakt dieselbe
     // Schliessgeschwindigkeit haben (POISON_EXTRA=0), ist der zeitliche
     // Abstand ihrer Trigger-Momente = Abstand/state.speed, unabhaengig vom
-    // Tempo selbst - 600-750 gibt bei JEDEM Tempo genug echten Abstand
-    // zwischen beiden Reaktionen (0 Gift-Treffer in >60 simulierten Minuten,
-    // Wueste und Hoehle, siehe README). Die Schlange ist dadurch bei hohem
-    // Tempo oft schon aus dem Bild (620 LW), aber noch oft genug sichtbar
-    // (LW~620 vs. 600-750 Abstand) - Sicherheit geht hier vor perfekter
-    // optischer Naehe bei jedem Tempo.
+    // Tempo selbst.
+    //
+    // Nutzerfeedback: "die Schlangen schiessen nicht" - Ursache war mit
+    // 600-750 tatsaechlich, dass die Schlange bei Hoechsttempo (960) laengst
+    // aus dem Bild gescrollt (x < -20, also entfernt) ist, BEVOR das Gift
+    // ueberhaupt am rechten Rand spawnt (640 - 675 im Schnitt = deutlich im
+    // Minus) - das "Schiessen" war fuer den Spieler dadurch praktisch nie
+    // sichtbar, obwohl es RNG-seitig korrekt passiert ist. Per Soak-Test im
+    // Browser (window.testGap-Methodik, 3x3600s je Wueste/Hoehle, echte
+    // Treffer-Zuordnung wie beim urspruenglichen Test) neu vermessen: der
+    // Sicherheitsabstand bricht zwischen 450-600 (noch 0 Gift-Treffer) und
+    // 350-500 (5 von ~300 Schlangen-Spawns in der Wueste trafen) zusammen -
+    // 500-650 liegt mit Puffer klar auf der sicheren Seite (0 Gift-Treffer
+    // in >3h simulierter Zeit je Modus) und bringt die Schlange bei
+    // Hoechsttempo wieder in den sichtbaren Bereich (640-650=-10 bis
+    // 640-500=140, statt vorher bis -100 im Minus).
     if (Math.random() < rampChance(POISON_START, POISON_RAMP, POISON_TARGET)) {
       state.poisonQueued = true;
-      return 600 + Math.random() * 150;
+      return 500 + Math.random() * 150;
     }
     return;
   }
@@ -2275,6 +2285,12 @@ function drawCrystal(o) {
   }
   ctx.restore();
 }
+// Kopf vorn LINKS (Weltscroll bewegt Hindernisse nach links auf die Figur
+// zu, die niedrige x-Kante erreicht die Figur also zuerst) - dieselbe
+// Korrektur wie schon bei drawBird() ("Vogel-Blickrichtung korrigiert"),
+// hier aber nie angewendet: der Kopf sass bislang an der HINTEREN (rechten)
+// Kante, die Schlange wirkte dadurch wie rueckwaerts/falschherum kriechend
+// (Nutzerfeedback: "bewegen sich in die falsche Richtung").
 function drawSnake(o) {
   G = ctx; ctx.fillStyle = theme.ground;
   var segs = 5, sw = o.w / segs, t = state.time * 6;
@@ -2282,10 +2298,10 @@ function drawSnake(o) {
     var wob = Math.sin(t + i * 0.9) * 2;
     rr(o.x + i * sw, o.y + o.h * 0.3 + wob, sw + 2, o.h * 0.55, o.h * 0.3);
   }
-  var hx = o.x + o.w - 4, hy = o.y - 2 + Math.sin(t + segs * 0.9) * 2;
+  var hx = o.x - 10, hy = o.y - 2 + Math.sin(t + segs * 0.9) * 2;
   rr(hx, hy, 14, o.h * 0.75, o.h * 0.35);
   ctx.fillStyle = theme.skyBot;
-  rr(hx + 8, hy + 2, 3, 3, 1.5);
+  rr(hx + 2, hy + 2, 3, 3, 1.5);
 }
 // Gift-Geschoss: neongruener Kern mit Glimmer-Halo und Kometenschweif nach
 // hinten (die Seite, aus der es kam - fliegt nach links, siehe POISON_EXTRA).
