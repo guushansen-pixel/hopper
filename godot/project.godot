@@ -1,0 +1,15 @@
+; Engine configuration file.
+; Von new-godot-app.ps1 -Bootstrap erzeugt (Phase-0-Toolchain-Test).
+
+config_version=5
+
+[application]
+
+config/name="HopperBootstrap"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "GDScript")
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true

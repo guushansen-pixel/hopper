@@ -1,2 +1,10 @@
 Thumbs.db
 desktop.ini
+
+# Godot (godot/ - siehe Migrationsplan): Editor-Cache und exportierte
+# Binaerdateien gehoeren nicht ins Repo - APKs gehen als GitHub-Release-Asset
+# raus, nicht in den Baum (dieselbe Lektion wie beim WebView-Build).
+/godot/.godot/
+*.apk
+*.aab
+*.pck
