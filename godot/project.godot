@@ -24,3 +24,8 @@ window/handheld/orientation="portrait"
 
 renderer/rendering_method="mobile"
 textures/vram_compression/import_etc2_astc=true
+
+; Phase 4: HDR2D + WorldEnvironment-Glow (siehe game_view.gd _setup_environment())
+; - der eigentliche Grund fuer den Godot-Umstieg. Nur mit Forward+/Mobile
+; wirksam (hier: "mobile", siehe oben).
+viewport/hdr_2d=true

@@ -112,6 +112,39 @@ internen Bot-Pfad) reproduzieren exakt die im JS-Original dokumentierten
 Sprunghoehen (voller Sprung ~120, kuerzester Tipp ~65 - Basiswert im
 JS-Kommentar: "kuerzester Tipp erreicht 65").
 
+**Nachtrag (echtes Geraet):** Ducken per Touch funktionierte auf dem
+Handy nicht. Ursache: `_handle_input()` rief JEDEN Physik-Frame
+bedingungslos `sim.set_ducking(false)`, sobald keine Taste gedrueckt war -
+das ueberschrieb den Touch-Zustand aus dem Touch-Event-Handler sofort
+wieder, weil `InputEventScreenTouch` nur einmal beim Druecken/Loslassen
+feuert, nicht laufend waehrend des Haltens (Event-basiert vs. Poll-basiert
+schrieben in dieselbe Variable). Fix: Touch setzt nur noch ein
+`touch_duck_held`-Flag, `_handle_input()` ist die EINZIGE Stelle, die
+`sim.ducking` setzt (als ODER aus Tastatur- und Touch-Zustand), einmal pro
+Frame. Lehre fuer kuenftigen Godot-Eingabecode hier: nie Event- und
+Poll-basierte Schreibzugriffe auf denselben gehaltenen Zustand mischen.
+
+**Phase 4 (HDR2D + Glow - der eigentliche Grund fuer den Umstieg)**: fertig.
+`_setup_environment()` in `game_view.gd` aktiviert `Environment.BG_CANVAS` +
+Glow (`viewport/hdr_2d=true` zusaetzlich in `project.godot` noetig, sonst
+wirkungslos). Gift-Geschoss und Kristall-Kaktus (Hoehle) bekommen HDR-Farben
+(Kanalwerte &gt; 1.0 - loesen den Bloom tatsaechlich aus) statt der bisherigen
+flachen Farben: `_draw_poison()` zeichnet einen weichen neongruenen
+Glow-Halo + Kometenschweif + hellen Kern, `_draw_crystal()` einen
+facettierten, blau leuchtenden Diamanten statt der flachen gruenen Box aus
+Phase 3. Per Screenshot-Trick verifiziert - beide zeigen einen klar
+sichtbaren, weichen Leucht-Halo um die Form. Zusaetzlich: ein echtes
+`GPUParticles2D` fuer Sprung-/Landestaub (statt selbst gemalter Partikel -
+lohnt sich hier, weil ein einzelner wiederverwendeter Knoten reicht, kein
+Verwaltungsaufwand pro Hindernis wie bei Gift/Kristall). Funktioniert,
+sichtbar aber noch klein/schlicht (6x6-Platzhaltertextur) - Feinschliff
+bei Bedarf spaeter.
+
+Bewusste Design-Entscheidung (siehe Recherche vor der Migration): Glow via
+HDR2D+WorldEnvironment statt eines SubViewport mit echter 3D-Szene - liefert
+denselben "leuchtet wirklich"-Eindruck bei deutlich weniger Aufwand/
+Verwaltung, ohne die 2D-Physik/Kollision anzufassen.
+
 ## Bauen
 
 ```powershell

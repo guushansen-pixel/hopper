@@ -23,9 +23,71 @@ const INK_ON_CAVE := Color(0.85, 0.87, 0.9)   # HUD-Text braucht auf dunklem Hoe
 var sim: HopperSim
 var bot_mode := false
 var touch_duck_held := false   # siehe _handle_input()/_input() - einzige Ducken-Quelle fuer Touch
+var was_on_ground := true      # fuer Sprung-/Landestaub, siehe _physics_process()
+var dust_particles: GPUParticles2D
 
 func _ready() -> void:
     sim = HopperSim.new()
+    was_on_ground = sim.on_ground
+    _setup_environment()
+    _setup_dust_particles()
+
+# ============================================================== Phase 4 ====
+# HDR2D + WorldEnvironment-Glow - der eigentliche Grund fuer den Godot-
+# Umstieg (siehe Plan/README): Farben mit Kanalwerten > 1.0 (siehe
+# _draw_poison()/_draw_crystal()) leuchten damit sichtbar, statt bei 1.0
+# geclamped zu werden. "viewport/hdr_2d=true" muss zusaetzlich in
+# project.godot gesetzt sein, sonst hat HDR-Farbe keine Wirkung.
+func _setup_environment() -> void:
+    var env := Environment.new()
+    env.background_mode = Environment.BG_CANVAS
+    env.glow_enabled = true
+    env.glow_intensity = 1.1
+    env.glow_strength = 1.2
+    env.glow_bloom = 0.18
+    env.glow_hdr_threshold = 1.0
+    env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+    var world_env := WorldEnvironment.new()
+    world_env.environment = env
+    add_child(world_env)
+
+# Ein einziger, wiederverwendeter Partikel-Knoten fuer Sprung-/Landestaub
+# (siehe _burst_dust()) - echtes GPUParticles2D statt selbst gemaltem
+# Behelf, wo es sich anbietet (viele kleine, kurzlebige Punkte). Der
+# Gift-Glow/Kristall-Glow dagegen bleibt bewusst _draw()-basiert (siehe
+# _draw_poison()/_draw_crystal()): dort ist die Form pro Hindernis fix und
+# an dessen Position/Groesse gebunden, ein eigener Partikel-Knoten pro
+# Hindernis waere unnoetiger Verwaltungsaufwand fuer denselben visuellen
+# Effekt (HDR-Glow-Halo).
+func _setup_dust_particles() -> void:
+    dust_particles = GPUParticles2D.new()
+    dust_particles.amount = 14
+    dust_particles.lifetime = 0.45
+    dust_particles.one_shot = true
+    dust_particles.explosiveness = 0.85
+    dust_particles.emitting = false
+    var mat := ParticleProcessMaterial.new()
+    mat.direction = Vector3(0.0, -1.0, 0.0)
+    mat.spread = 65.0
+    mat.initial_velocity_min = 40.0
+    mat.initial_velocity_max = 100.0
+    mat.gravity = Vector3(0.0, 260.0, 0.0)
+    mat.scale_min = 1.5
+    mat.scale_max = 3.2
+    mat.color = Color(0.55, 0.47, 0.35, 0.75)
+    dust_particles.process_material = mat
+    dust_particles.texture = _make_dot_texture()
+    add_child(dust_particles)
+
+func _make_dot_texture() -> ImageTexture:
+    var img := Image.create(6, 6, false, Image.FORMAT_RGBA8)
+    img.fill(Color(1.0, 1.0, 1.0, 1.0))
+    return ImageTexture.create_from_image(img)
+
+func _burst_dust(pos: Vector2) -> void:
+    dust_particles.position = pos
+    dust_particles.restart()
+    dust_particles.emitting = true
 
 func _physics_process(delta: float) -> void:
     if sim.dead:
@@ -35,6 +97,15 @@ func _physics_process(delta: float) -> void:
     else:
         _handle_input()
         sim.step(delta, false)
+
+    # Sprung-/Landestaub (Phase 4): Flankenerkennung ueber on_ground, da
+    # hopper_sim.gd selbst keine Events feuert (bewusst renderunabhaengig,
+    # siehe Kommentar dort).
+    if was_on_ground and not sim.on_ground:
+        _burst_dust(Vector2(HopperSim.RUNNER_X + 20.0, HopperSim.GROUND_Y))
+    elif not was_on_ground and sim.on_ground:
+        _burst_dust(Vector2(HopperSim.RUNNER_X + 20.0, HopperSim.GROUND_Y))
+    was_on_ground = sim.on_ground
 
     # Wueste -> Hoehle: vereinfachter, sofortiger Uebergang (kein Cutscene-
     # Wipe/Torbogen wie im Original - das ist reine Optik, spaetere Phase).
@@ -134,13 +205,16 @@ func _draw_obstacle(o: Dictionary) -> void:
     var h: float = o.h
     match String(o.kind):
         "cactus":
-            draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.25, 0.55, 0.3))
+            if sim.cave_on:
+                _draw_crystal(x, y, w, h)
+            else:
+                draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.25, 0.55, 0.3))
         "bird":
             draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.35, 0.55, 0.85))
         "snake":
             draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.55, 0.4, 0.2))
         "poison":
-            draw_circle(Vector2(x + w * 0.5, y + h * 0.5), w * 0.5, Color(0.22, 1.0, 0.42))
+            _draw_poison(x, y, w, h)
         "rock":
             draw_circle(Vector2(x + w * 0.5, y + h * 0.5), w * 0.5, Color(0.5, 0.5, 0.52))
         "stalactite":
@@ -155,6 +229,38 @@ func _draw_obstacle(o: Dictionary) -> void:
             draw_colored_polygon(tri2, Color(0.42, 0.44, 0.48))
         _:
             draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color.MAGENTA)  # unbekannt -> auffaellig
+
+# Neongruener Glow-Halo (mehrere weiche, ueberlagerte HDR-Kreise) + Kometen-
+# schweif nach hinten (rechts, da nach links geflogen wird) + heller Kern -
+# entspricht dem Original-Design (siehe web/index.html drawPoison()), aber
+# mit echtem HDR-Bloom statt eines gemalten radialen Gradienten. Kanalwerte
+# > 1.0 sind hier der Punkt: die loesen den in _setup_environment()
+# aktivierten Glow tatsaechlich aus.
+func _draw_poison(x: float, y: float, w: float, h: float) -> void:
+    var c := Vector2(x + w * 0.5, y + h * 0.5)
+    for i in range(4, 0, -1):
+        var r: float = w * (0.5 + i * 0.35)
+        draw_circle(c, r, Color(0.3, 3.0, 0.9, 0.10 / i))
+    var tail := PackedVector2Array([
+        c + Vector2(w * 0.3, -h * 0.28), c + Vector2(w * 1.6, 0.0), c + Vector2(w * 0.3, h * 0.28),
+    ])
+    draw_colored_polygon(tail, Color(0.15, 1.2, 0.4, 0.55))
+    draw_circle(c, w * 0.5, Color(0.4, 3.5, 1.0))
+    draw_circle(c - Vector2(w * 0.12, h * 0.12), w * 0.14, Color(1.6, 3.5, 2.0))
+
+# Kristall-Reskin des Kaktus in der Hoehle (rein optisch, dieselbe
+# Kollisionsbox - siehe web/README.md "Kristall-Skin"): facettierter
+# Diamant mit HDR-Glow statt der flachen gruenen Wueste-Box.
+func _draw_crystal(x: float, y: float, w: float, h: float) -> void:
+    var cx := x + w * 0.5
+    for i in range(3, 0, -1):
+        draw_circle(Vector2(cx, y + h * 0.65), w * (0.5 + i * 0.3), Color(0.3, 0.5, 1.8, 0.07))
+    var body := PackedVector2Array([
+        Vector2(cx, y), Vector2(x + w, y + h * 0.55), Vector2(x + w * 0.7, y + h),
+        Vector2(x + w * 0.3, y + h), Vector2(x, y + h * 0.55),
+    ])
+    draw_colored_polygon(body, Color(0.4, 0.7, 2.6))
+    draw_line(Vector2(cx, y), Vector2(cx, y + h), Color(1.0, 1.4, 3.0, 0.8), 1.5)
 
 func _draw_runner() -> void:
     var w: float = HopperSim.DUCK_W if sim.ducking else HopperSim.RUNNER_W
