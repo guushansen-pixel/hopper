@@ -12,7 +12,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.29" -VersionCode 32 -Force
+              -VersionName "1.30" -VersionCode 33 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -1128,3 +1128,63 @@ Verifiziert: 20 Autopilot-Soaks (9000 Frames) nach beiden Fixes - 0
 Gift-Treffer (vorher 2-3 pro 10 Laeufe je nach Bug), Reaktionsfenster
 283ms (Basiswert); Screenshot mit beiden Zielbahnen (Stehen -> mittel,
 Ducken -> tief); kein Konsolenfehler.
+
+## Gift sichtbar an die Schlange gekoppelt + Hoehlen-Sprunghoehe korrigiert (1.30)
+
+Feedback nach 1.29: "die projektile fliegen nicht von den schlangen weg
+sondern irgendwann danach oder davor". Der eigene Spawn-Zweig aus 1.29
+loeste Fairness-Probleme, aber der Preis war ein komplett unabhaengiger
+Zeitplan (`obstacleGap()`-Abstand zu IRGENDEINEM vorherigen Hindernis) -
+das Geschoss hatte optisch keinerlei erkennbare Verbindung mehr zu einer
+bestimmten Schlange.
+
+**Fix:** eine Schlange "queued" das Gift jetzt bei ihrem eigenen Spawn
+(`state.poisonQueued`), und `spawnObstacle()` loest es garantiert als
+naechstes Hindernis aus - immer von derselben Kante (`LW+20`) wie die
+Schlange kurz zuvor, und bei gleicher Schliessgeschwindigkeit
+(`POISON_EXTRA=0`) bleibt es die ganze Zeit im festen Abstand HINTER ihr,
+wie ausgespuckt. Ein kleiner Partikel-Spuckeffekt an der Schlangen-Position
+markiert den Abschuss zusaetzlich.
+
+Der erzwungene Abstand brauchte zwei Anlaeufe:
+
+1. **260-430** (klein, damit die Schlange bei `LW~620` noch im Bild ist,
+   wenn das Gift spawnt). Autopilot-Soak mit echter Treffer-Zuordnung (statt
+   nur dem Reaktionsfenster-Mass) zeigte aber 5 von 43 Gift-Treffern bei
+   Hoechsttempo: `autoPilot()` reagiert pro Frame nur auf das jeweils
+   naechste Hindernis (die Schleife bricht nach dem ersten passenden ab).
+   Bei kleinem Abstand liegt der Sprung-Trigger der Schlange zeitlich zu
+   nah am Duck/Sprung-Trigger des Gifts - Letzteres wird dabei uebersprungen,
+   bis es zu spaet ist. Da beide Objekte dieselbe Schliessgeschwindigkeit
+   haben, ist der zeitliche Abstand ihrer Trigger-Momente = Abstand/Tempo,
+   unabhaengig vom Tempo selbst.
+2. **600-750** behebt das: 0 Gift-Treffer in ueber 60 simulierten Minuten
+   (Wueste und Hoehle, Autopilot-Soak mit echter Treffer-Zuordnung). Die
+   Schlange ist dadurch bei hohem Tempo oft schon aus dem Bild (620 LW),
+   aber noch oft genug sichtbar - Sicherheit geht hier vor perfekter
+   optischer Naehe bei jedem Tempo.
+
+**Nebenfund beim Eigentest (aelterer, von diesem Feature unabhaengiger
+Bug):** der Autopilot machte in der Hoehle seit jeher einen kurzen
+"Tipp"-Sprung (`runner.capAt=0.02`, Scheitelhoehe ~65 statt ~126 beim
+vollen Sprung) - ein Relikt aus der Zeit, als die Decke selbst noch
+toedlich war (siehe 1.17). Ein deterministischer Hoehen-Test pro
+Kristall-Cluster-Breite und Tempo (kein Zufall, reine Sprungphysik) zeigt:
+dieser kurze Sprung reicht bei niedrigem Hoehlentempo (nahe `SPEED_START`)
+NICHT, um breite Kristall-Cluster (2-3 zusammenstehende Boden-Hindernisse)
+zu ueberspringen - unabhaengig davon, wann genau gesprungen wird (reine
+Geometrie: zu wenig Bodenstrecke oberhalb der Hindernishoehe waehrend der
+kurzen Flugzeit). Ein Stalaktit/eine Saeule wird davon nicht sicherer -
+beide treffen ohnehin jeden Sprung, kurz oder lang. Also gab es keinen
+Sicherheitsgrund mehr fuer den kurzen Tipp; er ist jetzt entfernt, die
+Hoehle springt genauso voll wie die Wueste. Verifiziert: derselbe
+Hoehen-Test zeigt danach "ok" fuer alle Cluster-Breiten ab `SPEED_START`.
+
+**Testmethodik-Faussfalle bei diesem Eigentest:** die im Browser-Tool
+geladene Seite laeuft weiter mit ihrer eigenen `requestAnimationFrame`-
+Schleife (echte Wanduhrzeit), auch waehrend ein Skript zusaetzlich manuell
+`update(dt)` aufruft - beide kaempften unbemerkt um denselben Zustand und
+erzeugten voellig unplausible Ergebnisse (u.a. 83% Fruehtod-Rate in einem
+ersten, falschen Testlauf). Fix fuer kuenftige Eigentests: vor jeder
+manuellen Simulation `window.requestAnimationFrame` auf eine No-Op-Funktion
+setzen, damit nur noch die manuellen `update()`-Aufrufe zaehlen.

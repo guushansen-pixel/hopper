@@ -869,7 +869,7 @@ function newGame(attract) {
     mountainOn: false, mountainT: 0, mountainVis: 0,
     caveOn: startInCave, caveVis: startInCave ? 1 : 0,
     entering: false, enterT: 0, enterArchX: 0,
-    bonus: 0, dripIn: 60, crystalIn: 260
+    bonus: 0, dripIn: 60, crystalIn: 260, poisonQueued: false
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
@@ -949,6 +949,33 @@ function poisonTargetY() {
 // den der Aufrufer statt obstacleGap() nimmt (siehe dort).
 function spawnObstacle() {
   if (state.mountainOn) { spawnRock(); return; }
+  // Gift-Ueberarbeitung (Korrektur): das Geschoss muss sichtbar VON EINER
+  // SCHLANGE kommen, nicht irgendwann unabhaengig auftauchen (Feedback: "die
+  // projektile fliegen nicht von den schlangen weg sondern irgendwann danach
+  // oder davor"). Ein wirklich unabhaengiger Zeitplan konnte beliebig weit
+  // vor oder nach jeder Schlange landen - keine erkennbare Verbindung. Fix:
+  // eine Schlange "queued" das Gift bei ihrem eigenen Spawn mit einem eigenen
+  // (erst zu klein, dann korrigiert - siehe Kommentar dort) erzwungenen
+  // Abstand statt der normalen obstacleGap(), und dieser Zweig hier loest es
+  // garantiert als NAECHSTES Hindernis aus. Optisch: das Gift spawnt am
+  // selben rechten Rand wie die Schlange kurz zuvor und bewegt sich danach
+  // mit derselben Geschwindigkeit (POISON_EXTRA=0) - es bleibt die ganze
+  // Zeit im festen Abstand HINTER der Schlange, wie ausgespuckt.
+  if (state.poisonQueued) {
+    state.poisonQueued = false;
+    obstacles.push({ kind: "poison", x: LW + 20, y: poisonTargetY(), w: 16, h: 16 });
+    for (var si = obstacles.length - 2; si >= 0; si--) {
+      if (obstacles[si].kind === "snake") {
+        var sHx = obstacles[si].x + obstacles[si].w - 4, sHy = obstacles[si].y - 2;
+        for (var pi = 0; pi < 5; pi++) {
+          spawnParticle(sHx, sHy, -40 - Math.random() * 60, (Math.random() - 0.5) * 60,
+                        0.3 + Math.random() * 0.2, 1.6 + Math.random() * 2, "poison");
+        }
+        break;
+      }
+    }
+    return;
+  }
   // 0.22 war bemessen, als die Decke selbst noch mittoedlich war - seit die
   // Decke reine Optik ist (siehe Hoehle-Kommentar oben), sind Stalaktiten/
   // Tropfsteinsaeulen die einzige Hoehlen-eigene Gefahr und duerfen deutlich
@@ -978,19 +1005,29 @@ function spawnObstacle() {
     // sicher bis Breite 55, ab 58 trifft es. 42-52 haelt Abstand zur Grenze.
     var sw = 42 + Math.random() * 10;
     obstacles.push({ kind: "snake", x: LW + 20, y: groundY - 16, w: sw, h: 16 });
-    return;
-  }
-  // Gift-Ueberarbeitung: eigener Spawn-Zweig statt an den Schlangen-Spawn
-  // gehaengt. Erster Versuch feuerte das Geschoss GLEICHZEITIG mit der
-  // Schlange von derselben Position ab - beide bewegen sich dann exakt
-  // gleich schnell (POISON_EXTRA=0) und kommen deshalb auch gleichzeitig an.
-  // Verlangte das Geschoss dabei "ducken" waehrend die Schlange "springen"
-  // verlangt (beides gleichzeitig unmoeglich), war das ein garantierter,
-  // unloesbarer Treffer. Als eigener Zweig laeuft es durch obstacleGap()
-  // wie jedes andere Hindernis und bekommt denselben garantierten Abstand
-  // zu allem anderen.
-  if (Math.random() < rampChance(POISON_START, POISON_RAMP, POISON_TARGET)) {
-    obstacles.push({ kind: "poison", x: LW + 20, y: poisonTargetY(), w: 16, h: 16 });
+    // Nur EINMAL pro Schlange die Chance auf Gift wuerfeln (queued, siehe
+    // oben) - keine eigene unabhaengige Zeitachse mehr dafuer. Erzwungener
+    // Abstand bis zum Gift statt der normalen obstacleGap(): erster Versuch
+    // nutzte 260-430 (klein, damit die Schlange bei LW~620 noch sichtbar
+    // ist) - Soak-Test mit Autopilot (echte Treffer-Zuordnung, nicht nur das
+    // Reaktionsfenster-Mass) zeigte aber 5 von 43 Gift-Treffern bei
+    // Hoechsttempo: der Autopilot reagiert pro Frame nur auf das NAECHSTE
+    // Hindernis (autoPilot()-Schleife bricht nach dem ersten passenden ab) -
+    // bei kleinem Abstand liegt der Sprung-Trigger der Schlange zeitlich zu
+    // nah am Duck/Sprung-Trigger des Gifts, und Letzteres wird dabei
+    // uebersprungen, bis es zu spaet ist. Da beide Objekte exakt dieselbe
+    // Schliessgeschwindigkeit haben (POISON_EXTRA=0), ist der zeitliche
+    // Abstand ihrer Trigger-Momente = Abstand/state.speed, unabhaengig vom
+    // Tempo selbst - 600-750 gibt bei JEDEM Tempo genug echten Abstand
+    // zwischen beiden Reaktionen (0 Gift-Treffer in >60 simulierten Minuten,
+    // Wueste und Hoehle, siehe README). Die Schlange ist dadurch bei hohem
+    // Tempo oft schon aus dem Bild (620 LW), aber noch oft genug sichtbar
+    // (LW~620 vs. 600-750 Abstand) - Sicherheit geht hier vor perfekter
+    // optischer Naehe bei jedem Tempo.
+    if (Math.random() < rampChance(POISON_START, POISON_RAMP, POISON_TARGET)) {
+      state.poisonQueued = true;
+      return 600 + Math.random() * 150;
+    }
     return;
   }
   var tall = Math.random() < 0.45;
@@ -1121,10 +1158,17 @@ function autoPilot() {
       doJump(true);
       // Historisch: als die Decke noch toedlich war, musste der Autopilot
       // hier zwingend kurz tippen, sonst starb er fast bei jedem Sprung (die
-      // Decke ist seit 1.17 reine Optik, siehe Hoehle-Kommentar). Der kurze
-      // Tipp raeumt Bodenhindernisse weiterhin genauso sicher, bleibt also
-      // unveraendert - kein Grund, hier laenger zu halten.
-      if (state.caveOn) { runner.capAt = 0.02; }
+      // Decke ist seit 1.17 reine Optik, siehe Hoehle-Kommentar). Die
+      // Behauptung "der kurze Tipp raeumt Bodenhindernisse weiterhin genauso
+      // sicher" stimmte aber nicht mehr: bei Eigentest (deterministischer
+      // Hoehen-Test pro Kristall-Cluster-Breite/Tempo) verfehlte der kurze
+      // Sprung (Scheitel ~65) breite Cluster (count>=2) bei niedrigem
+      // Hoehlentempo garantiert, ganz gleich wann gesprungen wird (reine
+      // Geometrie: zu wenig Bodenstrecke oberhalb der Hindernishoehe). Ein
+      // Stalaktit/eine Saeule wird davon NICHT sicherer gemacht - beide
+      // treffen ohnehin JEDEN Sprung, kurz oder lang (siehe deren Kommentare),
+      // also gibt es keinen Sicherheitsgrund mehr fuer den kurzen Tipp. Der
+      // volle Sprung (wie in der Wueste) ist jetzt ueberall gleich.
     }
   }
   else if (want === "duck") { runner.ducking = true; }
@@ -1653,8 +1697,9 @@ function drawParticles() {
     // theme.dust - dieselbe Begruendung wie ueberall sonst in der Hoehle:
     // theme.dust folgt dem Tag/Nacht-Zyklus, ein Tropfen soll immer gleich
     // aussehen.
-    ctx.globalAlpha = a * (p.c === "accent" ? 1 : 0.62);
-    ctx.fillStyle = (p.c === "accent") ? theme.accent : (p.c === "drip" ? "#6fc3e0" : theme.dust);
+    ctx.globalAlpha = a * (p.c === "accent" || p.c === "poison" ? 1 : 0.62);
+    ctx.fillStyle = (p.c === "accent") ? theme.accent
+      : (p.c === "drip") ? "#6fc3e0" : (p.c === "poison") ? "#39ff6a" : theme.dust;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (0.35 + a * 0.65), 0, 6.2832); ctx.fill();
   }
   ctx.globalAlpha = 1;
