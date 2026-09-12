@@ -8,3 +8,8 @@ desktop.ini
 *.apk
 *.aab
 *.pck
+
+# Lokal per tests/screenshot_test.gd erzeugte Debug-Screenshots (+ Godots
+# automatisch dazu erzeugte Import-Metadaten)
+/godot/tests/*.png
+/godot/tests/*.png.import

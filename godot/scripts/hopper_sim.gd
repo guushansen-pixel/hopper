@@ -118,7 +118,7 @@ var mountain_on := false
 var mountain_t := 0.0
 var next_mountain_at := 0.0
 var poison_queued := false
-var scroll_ceiling := 0.0     # fuer _ceiling_gap_at(), wie state.scrollCeiling
+var scroll_ceiling := 0.0     # fuer ceiling_gap_at(), wie state.scrollCeiling
 
 var rng := RandomNumberGenerator.new()
 
@@ -222,6 +222,24 @@ func _do_jump() -> void:
     on_ground = false
     coyote = 0.0
     buffer = 0.0
+
+# ==================================================== Oeffentliche Eingabe ==
+# Fuer Phase 3 (echte Spielersteuerung, siehe scripts/game_view.gd) - wie
+# jump()/endJump()/setDuck() in web/index.html. Der Bot (_bot_decide()) ruft
+# stattdessen _do_jump() direkt und setzt "ducking" direkt, weil er (wie das
+# Original) IMMER den vollen Sprung macht, nie JUMP_CUT auf sich anwendet.
+func jump() -> void:
+    if coyote > 0.0:
+        _do_jump()
+    else:
+        buffer = JUMP_BUFFER
+
+func end_jump() -> void:
+    if runner_vy < 0.0:
+        runner_vy = max(runner_vy, min(runner_vy * JUMP_CUT, JUMP_CUT_MIN))
+
+func set_ducking(on: bool) -> void:
+    ducking = on
 
 func _next_mountain_gap() -> float:
     # min()/max() geben statisch Variant zurueck (generische Builtins) -
@@ -331,13 +349,31 @@ func _spawn_rock() -> void:
         "roll_extra": 0.0,
     })
 
-func _ceiling_gap_at(world_x: float) -> float:
+# Deterministische Ganzzahl-Hash-Pseudozufallsfunktion, wortgleich aus
+# web/index.html (rockNoise()) - liefert fuer dasselbe n IMMER denselben
+# 0-1-Wert. Fuer Hoehlentexturen (Speckel/Risse/Moos), die beim Scrollen
+# NICHT "schwimmen" duerfen, weil sie an Weltkoordinaten haengen statt an der
+# Framezahl. Bewusst NICHT bit-exakt zur JS-Version (JS truncatiert bei jeder
+# Bitoperation auf 32-Bit-Integer, `*`/`+` bleiben aber Gleitkomma-Doubles -
+# GDScripts `int` ist 64-Bit und wraps anders). Rein kosmetisch, nicht
+# fairness-relevant, daher unkritisch: dieselbe Formel, mit derselben
+# abschliessenden Maskierung/Normalisierung, liefert fuer den hier
+# tatsaechlich genutzten Eingabebereich weiterhin ein deterministisches,
+# gleichmaessig verteilt wirkendes Ergebnis.
+static func rock_noise(n: int) -> float:
+    var h: int = (n << 13) ^ n
+    h = h * (h * h * 15731 + 789221) + 1376312589
+    return float(h & 0x7fffffff) / 1073741824.0
+
+# Oeffentlich (kein "_"-Praefix): auch von game_view.gd fuers Zeichnen der
+# Deckenkontur gebraucht, nicht nur intern beim Spawnen.
+func ceiling_gap_at(world_x: float) -> float:
     var wave := 0.5 + 0.5 * sin((world_x / CAVE_WAVELEN) * TAU)
     return CAVE_MIN_GAP + wave * (CAVE_MAX_GAP - CAVE_MIN_GAP)
 
 func _spawn_stalactite() -> float:
     var spawn_x := LW + 20.0
-    var gap := _ceiling_gap_at(scroll_ceiling + spawn_x)
+    var gap := ceiling_gap_at(scroll_ceiling + spawn_x)
     var tip := STALACTITE_TIP_MIN + rng.randf() * (STALACTITE_TIP_MAX - STALACTITE_TIP_MIN)
     var h: float = max(10.0, gap - tip)
     obstacles.append({"kind": "stalactite", "x": spawn_x, "y": GROUND_Y - gap, "w": 34.0, "h": h})
@@ -345,7 +381,7 @@ func _spawn_stalactite() -> float:
 
 func _spawn_pillar() -> float:
     var spawn_x := LW + 20.0
-    var gap := _ceiling_gap_at(scroll_ceiling + spawn_x)
+    var gap := ceiling_gap_at(scroll_ceiling + spawn_x)
     var tip := PILLAR_TIP_MIN + rng.randf() * (PILLAR_TIP_MAX - PILLAR_TIP_MIN)
     var h: float = max(10.0, gap - tip)
     obstacles.append({"kind": "pillar", "x": spawn_x, "y": GROUND_Y - gap, "w": 30.0, "h": h})
