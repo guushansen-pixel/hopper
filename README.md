@@ -4,14 +4,31 @@ Endless Runner als reine Web-App, die per [apk-builder](../apk-builder)
 zu einer Android-APK wird. Laeuft komplett offline, ohne Abhaengigkeiten,
 alles in einer Datei.
 
-## Godot-Migration (laeuft, siehe godot/)
+## Aktiver Stand: wieder WebView (`web/`)
 
-`web/` bleibt die aktuell shippende Version, unveraendert, solange die
-Migration laeuft. Grund: der User will echte Partikel-/Glow-Effekte
-("3D-Partikel"), dabei aber das bestehende 2D-Gameplay/Physik/Fairness-Tuning
-unveraendert lassen - Godot statt Unity, weil MIT-lizenziert und ohne
-Risiko kuenftiger Lizenzaenderungen (siehe apk-builder/CLAUDE.md fuer die
-Toolchain-Seite). Voller Plan:
+Die Godot-Migration (siehe Abschnitt unten) wurde komplett durchgezogen
+(Phase 0-7) und auf dem Geraet installiert, aber im direkten Vergleich
+wirkte Godots Rendering (bewusst schlicht gehalten, "Funktion vor Politur")
+deutlich hinter der gewachsenen `web/`-Version zurueck ("sieht aus wie aus
+der Steinzeit"). Auf Nutzerwunsch ist die WebView-Version (`web/`,
+unveraendert) seit **V17** wieder die aktive App auf dem Geraet -
+`com.daniel.hopper`, Versionscode 35 (ueber Godots 34), installiert sich
+dadurch als sauberes Update ueber die Godot-App (identisches
+Signatur-Zertifikat, geteilter Keystore). Der Godot-Code bleibt vollstaendig
+im Repo (`godot/`) erhalten und jederzeit wieder installierbar - siehe
+`C:\Users\Daniel\.claude\plans\kannst-du-hier-direkt-indexed-pelican.md`
+(Abschnitt "Visueller/UI-Vollausbau", Phase 8-13) fuer eine vollstaendige
+Bestandsaufnahme, was Godot gegenueber `web/` visuell/spielerisch noch
+fehlt, falls das Thema spaeter wieder aufgegriffen wird.
+
+## Godot-Migration (abgeschlossen, Phase 0-7, siehe godot/)
+
+`web/` blieb die ganze Migration ueber unveraendert als Fallback. Grund fuer
+den Umstieg: der User wollte echte Partikel-/Glow-Effekte ("3D-Partikel"),
+dabei aber das bestehende 2D-Gameplay/Physik/Fairness-Tuning unveraendert
+lassen - Godot statt Unity, weil MIT-lizenziert und ohne Risiko kuenftiger
+Lizenzaenderungen (siehe apk-builder/CLAUDE.md fuer die Toolchain-Seite).
+Voller Plan:
 `C:\Users\Daniel\.claude\plans\kannst-du-hier-direkt-indexed-pelican.md`.
 
 **Phase 0 (Toolchain)**: fertig, verifiziert (siehe apk-builder-Commit
