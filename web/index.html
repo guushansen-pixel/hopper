@@ -940,6 +940,9 @@ function spawnObstacle() {
     return;
   }
   if (Math.random() < rampChance(SNAKE_START, SNAKE_RAMP, SNAKE_TARGET)) {
+    // In der Hoehle ersetzt die Haengespinne (echte neue Mechanik, siehe
+    // spawnSpider()) die Schlange komplett statt sie nur umzuskinnen.
+    if (state.caveOn) { return spawnSpider(); }
     // Schlange: niedrig und breit statt hoch und schmal. Vermessen:
     // sicher bis Breite 55, ab 58 trifft es. 42-52 haelt Abstand zur Grenze.
     var sw = 42 + Math.random() * 10;
@@ -997,6 +1000,47 @@ function spawnPillar() {
   obstacles.push({ kind: "pillar", x: spawnX, y: groundY - gap, w: 30, h: h,
                    stubH: 12 + Math.random() * 8, seed: Math.random() * 1000 | 0 });
   return 220 + Math.random() * 100;
+}
+
+// Haengespinne: ersetzt die Schlange in der Hoehle (spawnObstacle(), gleicher
+// rampChance-Slot ueber SNAKE_START/RAMP/TARGET) - statt eines Bodenhindernisses
+// haengt sie an einem Faden von der aktuellen Deckenwelle (ceilingGapAt(), wie
+// bei Stalaktit/-saeule) und laesst sich WAEHREND ihres Durchlaufs einmal kurz
+// herab, statt durchgehend gefaehrlich zu sein wie jedes andere Hindernis -
+// die eigentliche neue Mechanik: ein zeitlich begrenztes Duck-Fenster statt
+// eines Dauerzustands.
+//
+// Die Absprung-/Ruecksprungphasen haengen an der seit dem Spawn zurueckgelegten
+// WELT-Distanz (nicht an vergangener Zeit) - dieselbe Begruendung wie beim
+// Schlange->Gift-Abstand: eine Distanz-Schwelle sitzt bei JEDEM Tempo an
+// derselben Bildschirmtiefe, eine Zeit-Schwelle nicht. spiderDropFraction()
+// wird sowohl von update() (aktuelle Position) als auch von autoPilot()
+// (vorhergesagte Position beim Kontaktzeitpunkt) mit derselben Formel
+// aufgerufen, siehe dort - der Automat kennt so den kuenftigen Zustand, ohne
+// eine eigene Sonderbehandlung fuer "wird erst gleich gefaehrlich" zu brauchen.
+var SPIDER_RETRACT_ZONE = 240;   // bleibt nach dem Spawn so lange eingezogen
+var SPIDER_DROP_ZONE = 90;       // Strecke fuer die Abwaertsbewegung
+var SPIDER_HOLD_ZONE = 320;      // bleibt so lange unten (die eigentliche Duck-Zone)
+var SPIDER_RISE_ZONE = 90;       // Strecke fuer die Aufwaertsbewegung, danach dauerhaft sicher
+var SPIDER_DANGER_FRAC = 0.3;    // ab dieser Absprung-Tiefe zaehlt es fuer den Automat als gefaehrlich
+// Tiefe im vollstaendig herabgelassenen Zustand - wiederverwendet exakt PILLAR_TIP
+// (26-36, bereits verifiziert: im Stehen IMMER Treffer, im Ducken IMMER sicher),
+// statt eine neue Sicherheitsspanne von Grund auf neu herzuleiten.
+var SPIDER_TIP = 30, SPIDER_W = 18, SPIDER_H = 20;
+function spiderDropFraction(dist) {
+  if (dist < SPIDER_RETRACT_ZONE) { return 0; }
+  var t = dist - SPIDER_RETRACT_ZONE;
+  if (t < SPIDER_DROP_ZONE) { return t / SPIDER_DROP_ZONE; }
+  t -= SPIDER_DROP_ZONE;
+  if (t < SPIDER_HOLD_ZONE) { return 1; }
+  t -= SPIDER_HOLD_ZONE;
+  if (t < SPIDER_RISE_ZONE) { return 1 - t / SPIDER_RISE_ZONE; }
+  return 0;
+}
+function spawnSpider() {
+  obstacles.push({ kind: "spider", x: LW + 20, w: SPIDER_W, h: SPIDER_H,
+                   y: groundY - ceilingGapAt(scrollCeiling + LW + 20), legT: Math.random() * 6.28 });
+  return;
 }
 
 // Felsen: rund, rollt herunter und wird waehrend der Fahrt schneller (siehe
@@ -1067,6 +1111,16 @@ function autoPilot() {
       want = (o.y <= groundY - 40) ? "duck" : "jump";
     } else if (o.kind === "stalactite" || o.kind === "pillar") {
       want = "duck";   // Stalaktiten/Saeulen verlangen "nicht springen", nie ueberspringbar
+    } else if (o.kind === "spider") {
+      // Die Spinne ist nur WAEHREND ihres Absprungfensters gefaehrlich (siehe
+      // spawnSpider()) - der Automat kennt keine Zukunft, sagt den Zustand
+      // beim Kontaktzeitpunkt also ueber dieselbe spiderDropFraction()-Formel
+      // wie update() voraus, statt nur den JETZIGEN (evtl. noch sicheren)
+      // Zustand zu pruefen.
+      var distNow = (LW + 20) - o.x;
+      var distAtContact = distNow + closingSpeed * Math.max(0, tContact);
+      if (spiderDropFraction(distAtContact) < SPIDER_DANGER_FRAC) { continue; }
+      want = "duck";
     } else { want = "jump"; }
     if (want === "jump" && tContact > tTrigger) { want = "wait"; }
     break;
@@ -1285,6 +1339,19 @@ function update(dt) {
     }
     o.x -= move;
     if (o.kind === "bird" || o.kind === "bat") { o.flap += dt * 10; }
+    if (o.kind === "spider") {
+      // Position jeden Frame neu aus der aktuellen Deckenwelle + dem
+      // distanzbasierten Absprungfortschritt ableiten (siehe spawnSpider()) -
+      // dieselbe Groesse (o.y/o.h), die auch hits() unten generisch prueft,
+      // es braucht also keine eigene Kollisionsbehandlung.
+      o.legT += dt * 8;
+      var gap = ceilingGapAt(scrollCeiling + o.x);
+      var ceilY = groundY - gap;
+      var droppedY = groundY - SPIDER_TIP - SPIDER_H;
+      var frac = spiderDropFraction((LW + 20) - o.x);
+      o.y = ceilY + (droppedY - ceilY) * frac;
+      o.dropFrac = frac;
+    }
     if (o.x + o.w < -20) { obstacles.splice(i, 1); continue; }
     if (hits(o)) { die(); return; }
   }
@@ -2235,6 +2302,37 @@ function drawSnake(o) {
   ctx.fillStyle = theme.skyBot;
   rr(hx + 2, hy + 2, 3, 3, 1.5);
 }
+// Haengespinne (ersetzt die Schlange in der Hoehle, siehe spawnSpider()):
+// Faden zur aktuellen Deckenkontur + Koerper mit acht wackelnden Beinen.
+// o.dropFrac (0..1, von update() gesetzt) blendet den Koerper sanft ein,
+// solange sie noch eingezogen/kaum sichtbar am Faden haengt - macht den
+// Moment des Herablassens optisch deutlicher, statt dass sie schon die
+// ganze Zeit voll sichtbar bei der Decke klebt.
+function drawSpider(o) {
+  G = ctx;
+  var gap = ceilingGapAt(scrollCeiling + o.x);
+  var ceilY = groundY - gap;
+  var cx = o.x + o.w * 0.5, cy = o.y + o.h * 0.5;
+  var t = state.time * 9 + o.legT;
+  ctx.strokeStyle = "rgba(224,228,234,0.5)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, ceilY); ctx.lineTo(cx, cy - o.h * 0.35); ctx.stroke();
+  ctx.globalAlpha = 0.4 + 0.6 * o.dropFrac;
+  ctx.strokeStyle = CAVE_ROCK; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+  for (var s = -1; s <= 1; s += 2) {
+    for (var l = 0; l < 4; l++) {
+      var ang = (l - 1.5) * 0.5 + Math.sin(t + l) * 0.10;
+      var lx = cx + s * Math.cos(ang) * o.w * 0.95;
+      var ly = cy + Math.sin(ang) * o.h * 0.55 + o.h * 0.2;
+      ctx.beginPath(); ctx.moveTo(cx + s * o.w * 0.22, cy); ctx.lineTo(lx, ly); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = CAVE_ROCK;
+  ctx.beginPath(); ctx.ellipse(cx, cy, o.w * 0.42, o.h * 0.42, 0, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = "#ff5252";
+  ctx.beginPath(); ctx.arc(cx - 2.6, cy - 1, 1.3, 0, 6.2832); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 2.6, cy - 1, 1.3, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1;
+}
 // Leichte Vignette in der Hoehle - dunkelt nur die Ecken ab, der komplette
 // Spielbereich (wo Hindernisse erscheinen) bleibt hell genug, um alles
 // rechtzeitig zu sehen. Bewusst kein "Taschenlampenkegel" um die Figur: die
@@ -2329,6 +2427,7 @@ function render() {
     else if (ob.kind === "bat") { drawBat(ob); }
     else if (ob.kind === "rock") { drawRock(ob); }
     else if (ob.kind === "snake") { drawSnake(ob); }
+    else if (ob.kind === "spider") { drawSpider(ob); }
     else if (ob.kind === "stalactite") { drawStalactite(ob); }
     else if (ob.kind === "pillar") { drawPillar(ob); }
     else { drawCactus(ob); }
