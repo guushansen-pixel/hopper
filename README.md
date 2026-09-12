@@ -4,6 +4,51 @@ Endless Runner als reine Web-App, die per [apk-builder](../apk-builder)
 zu einer Android-APK wird. Laeuft komplett offline, ohne Abhaengigkeiten,
 alles in einer Datei.
 
+## Godot-Migration (laeuft, siehe godot/)
+
+`web/` bleibt die aktuell shippende Version, unveraendert, solange die
+Migration laeuft. Grund: der User will echte Partikel-/Glow-Effekte
+("3D-Partikel"), dabei aber das bestehende 2D-Gameplay/Physik/Fairness-Tuning
+unveraendert lassen - Godot statt Unity, weil MIT-lizenziert und ohne
+Risiko kuenftiger Lizenzaenderungen (siehe apk-builder/CLAUDE.md fuer die
+Toolchain-Seite). Voller Plan:
+`C:\Users\Daniel\.claude\plans\kannst-du-hier-direkt-indexed-pelican.md`.
+
+**Phase 0 (Toolchain)**: fertig, verifiziert (siehe apk-builder-Commit
+"Zweite Build-Faehigkeit").
+
+**Phase 1 (Kern-Physik + ein Hindernis + Bot + Soak-Harness)**: begonnen.
+`godot/scripts/hopper_sim.gd` portiert Laeufer-Physik (Sprung/Schwerkraft/
+Coyote/Buffer), `hits()`-Kollision und den Kaktus-Spawn wortgleich aus
+`web/index.html`; `godot/tests/soak_test.gd` ist das Godot-Aequivalent der
+bisherigen Browser-Autopilot-Soaks (`godot --headless --path godot -s
+res://tests/soak_test.gd -- --seconds=1800 --seed=1`).
+
+Beim ersten echten Soak-Lauf direkt ein echter Fund (nicht nur Toolchain-
+Kram): der deterministische Hoehen-/Breitentest zeigt jedes Kaktus-Cluster
+(1-3, hoch/niedrig) bei jedem Tempo zwischen 330 und 960 als einzeln
+ueberspringbar, UND das minimale Reaktionsfenster liegt bei >=267ms (JS-
+Basiswert: 283ms, Differenz ist Frame-Rundung, kein echter Unterschied) -
+trotzdem 139 Tode in 1800 simulierten Sekunden. Ursache: `obstacleGap()`s
+Dichte-Untergrenze (Faktor 0.72, wortgleich aus dem JS-Original) laesst bei
+manchen Zufallswerten zu wenig Abstand zwischen zwei AUFEINANDERFOLGENDEN
+Kakteen, um vom ersten Sprung zum spaetesten Absprungpunkt des naechsten zu
+kommen. Vermutlich kein Godot-spezifischer Bug, sondern eine Eigenschaft der
+Formel, die im echten Spiel durch die Durchmischung mit Voegeln/Schlangen/
+etc. verduennt wird - in der Kaktus-Monokultur von Phase 1 (bewusst nur ein
+Hindernistyp) tritt sie viel deutlicher auf. Bewusst NICHT jetzt gefixt:
+gehoert zum vollen Spawn-/Dichte-System, das laut Plan erst in Phase 2 (mit
+der vollen Hindernis-Mischung) uebertragen und dort neu verifiziert wird.
+
+Zwei GDScript-Eigenheiten beim Bauen gefunden, fuer spaetere Phasen wichtig:
+`-s script.gd`-Kopflosmodus registriert offenbar keine globalen
+`class_name`-Bezeichner (`preload()` stattdessen verwenden), und `:=`-Typinferenz
+scheitert leise an Dictionary-Feldzugriffen (`o.x` ist Variant) - das
+verursachte einen scheinbaren Absturz/Haenger (Godots Skript-Neulade-
+Mechanismus versucht ein Skript mit Parse-Fehler endlos neu zu kompilieren,
+statt sauber abzubrechen). Immer explizite `: float =`/`float(...)`
+verwenden, nie `:=`, wenn ein Dictionary-Feld beteiligt ist.
+
 ## Bauen
 
 ```powershell
