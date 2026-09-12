@@ -29,3 +29,11 @@ textures/vram_compression/import_etc2_astc=true
 ; - der eigentliche Grund fuer den Godot-Umstieg. Nur mit Forward+/Mobile
 ; wirksam (hier: "mobile", siehe oben).
 viewport/hdr_2d=true
+
+[autoload]
+
+; Phase 5: 100% synthetisierte Sound-Effekte, ueberall per "Sfx.jump()" etc.
+; erreichbar (siehe scripts/sfx.gd). Musik ist bewusst KEIN Autoload -
+; game_view.gd haelt eine eigene music.gd-Instanz, da nur eine Szene sie
+; braucht.
+Sfx="*res://scripts/sfx.gd"

@@ -20,17 +20,25 @@ const RUNNER_COLOR := Color(0.9, 0.35, 0.2)
 const INK := Color(0.15, 0.15, 0.18)
 const INK_ON_CAVE := Color(0.85, 0.87, 0.9)   # HUD-Text braucht auf dunklem Hoehlenhimmel hellen Kontrast
 
+const Music = preload("res://scripts/music.gd")
+
 var sim: HopperSim
 var bot_mode := false
 var touch_duck_held := false   # siehe _handle_input()/_input() - einzige Ducken-Quelle fuer Touch
-var was_on_ground := true      # fuer Sprung-/Landestaub, siehe _physics_process()
+var was_on_ground := true      # fuer Sprung-/Landestaub + Sprung-/Land-SFX, siehe _physics_process()
+var was_ducking := false       # fuer Duck-SFX (nur auf der steigenden Flanke)
+var last_score_hundred := 0    # fuer Punkte-SFX, wortgleich zu web/index.html: Sound bei jeder vollen 100er-Schwelle
 var dust_particles: GPUParticles2D
+var music: Music
 
 func _ready() -> void:
     sim = HopperSim.new()
     was_on_ground = sim.on_ground
     _setup_environment()
     _setup_dust_particles()
+    music = Music.new()
+    add_child(music)
+    Sfx.cave_on = sim.cave_on
 
 # ============================================================== Phase 4 ====
 # HDR2D + WorldEnvironment-Glow - der eigentliche Grund fuer den Godot-
@@ -98,21 +106,47 @@ func _physics_process(delta: float) -> void:
         _handle_input()
         sim.step(delta, false)
 
-    # Sprung-/Landestaub (Phase 4): Flankenerkennung ueber on_ground, da
-    # hopper_sim.gd selbst keine Events feuert (bewusst renderunabhaengig,
-    # siehe Kommentar dort).
+    # Sprung-/Landestaub + -SFX (Phase 4/5): Flankenerkennung ueber
+    # on_ground, da hopper_sim.gd selbst keine Events feuert (bewusst
+    # renderunabhaengig, siehe Kommentar dort - Audio gehoert wie Rendering
+    # in die View-Schicht, nicht in die Sim).
     if was_on_ground and not sim.on_ground:
         _burst_dust(Vector2(HopperSim.RUNNER_X + 20.0, HopperSim.GROUND_Y))
+        Sfx.jump()
     elif not was_on_ground and sim.on_ground:
         _burst_dust(Vector2(HopperSim.RUNNER_X + 20.0, HopperSim.GROUND_Y))
+        Sfx.land()
     was_on_ground = sim.on_ground
+
+    # Ducken-SFX nur auf der steigenden Flanke (nicht jeden Frame, solange
+    # gehalten wird) - wortgleich zum Original (SFX.duck() nur beim Ansetzen).
+    if sim.ducking and not was_ducking:
+        Sfx.duck()
+    was_ducking = sim.ducking
+
+    # Punkte-SFX bei jeder vollen 100er-Schwelle, wortgleich zu
+    # web/index.html ("Math.floor(score/100) > Math.floor(prev/100)").
+    var cur_hundred := int(sim.score() / 100.0)
+    if cur_hundred > last_score_hundred:
+        Sfx.point()
+    last_score_hundred = cur_hundred
 
     # Wueste -> Hoehle: vereinfachter, sofortiger Uebergang (kein Cutscene-
     # Wipe/Torbogen wie im Original - das ist reine Optik, spaetere Phase).
     if not sim.cave_on and sim.score() >= HopperSim.CAVE_START:
         sim.cave_on = true
+    Sfx.cave_on = sim.cave_on
+
+    # Musik nur bei echter Spielersteuerung (wie im Original: nicht im
+    # Attract-/Bot-Modus) - einmalig starten/stoppen, nicht jeden Frame neu
+    # (das wuerde den Sequencer-Schritt jedesmal auf 0 zuruecksetzen).
+    if bot_mode and music.enabled:
+        music.stop()
+    elif not bot_mode and not music.enabled:
+        music.start()
 
     if sim.dead:
+        Sfx.die()
         _on_death()
 
     queue_redraw()

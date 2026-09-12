@@ -145,6 +145,40 @@ HDR2D+WorldEnvironment statt eines SubViewport mit echter 3D-Szene - liefert
 denselben "leuchtet wirklich"-Eindruck bei deutlich weniger Aufwand/
 Verwaltung, ohne die 2D-Physik/Kollision anzufassen.
 
+**Phase 5 (Audio - 100% synthetisiert, keine Audiodatei)**: fertig.
+`scripts/audio_synth.gd` erzeugt Wellenformen (Sinus/Rechteck/Saegezahn/
+Dreieck mit exponentiellem Frequenz-Sweep, plus gefiltertes Rauschen per
+Biquad-Bandpass) als `AudioStreamWAV` im Speicher - wortgleiches Prinzip zu
+web/index.html (`tone()`/`noise()` ueber WebAudio), aber als einmal
+generierte Clips statt Echtzeit-Oszillatoren. `scripts/sfx.gd` (Autoload
+"Sfx") haelt alle 8 Sounds aus dem Original (jump/land/duck/point/die/ui/
+equip/enter, gleiche Frequenzen/Dauer/Lautstaerken) plus den
+Hoehlen-Echo-Effekt (`withCaveEcho()`-Aequivalent: zweites, leiseres
+Abspielen 110ms spaeter, nur wenn `cave_on`). `scripts/music.gd` ist ein
+einfacher Sequencer (126bpm, 4 Akkorde + Bass + Hi-Hat) - bewusst NICHT
+notengetreu zum Original (die exakte Notenfolge liess sich aus dem
+archivierten Kommentar nicht rekonstruieren, nur der Stil), rein kosmetisch
+also unkritisch. `game_view.gd` loest die Sounds ueber Flankenerkennung aus
+(Sprung/Landung ueber `on_ground`-Wechsel, Ducken nur auf der steigenden
+Flanke, Punkte-Sound bei jeder vollen 100er-Schwelle, Musik nur bei echter
+Steuerung wie im Original - nicht im Bot-/Testmodus).
+
+**Neue Testmodus-Falle gefunden**: Autoloads (hier "Sfx") werden im
+`-s script.gd`-Kopflosmodus NICHT initialisiert - anders als beim normalen
+Start ueber `run/main_scene`. Ein Testskript, das `game_view.gd` direkt
+instanziiert, bekommt einen COMPILE-Fehler ("Identifier not found: Sfx"),
+nicht nur einen leeren Autoload. Verifiziert wurde das echte Bootstrapping
+deshalb mit `godot --path <projekt> --quit-after 200` (kein `-s`, laedt
+main.tscn ganz normal inkl. Autoloads) - lief fehlerfrei durch. Fuer
+kuenftige Phasen mit Autoload-Abhaengigkeiten (z.B. Menues in Phase 6)
+denselben `--quit-after`-Trick statt `-s` verwenden, sobald Autoloads
+gebraucht werden.
+
+Da ich selbst nichts hoeren kann: die Sounds sind per Code-Review + einer
+Bytegroessen-/Fehlerfreiheits-Pruefung verifiziert (korrekte Sample-Anzahl,
+kein Absturz beim echten Abspielen), nicht per Gehoer. Rueckmeldung vom
+User noetig, ob sich das auf dem Geraet gut anhoert.
+
 ## Bauen
 
 ```powershell
