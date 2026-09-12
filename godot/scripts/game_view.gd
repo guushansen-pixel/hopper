@@ -22,11 +22,10 @@ const INK_ON_CAVE := Color(0.85, 0.87, 0.9)   # HUD-Text braucht auf dunklem Hoe
 
 var sim: HopperSim
 var bot_mode := false
-var was_cave_on := false
+var touch_duck_held := false   # siehe _handle_input()/_input() - einzige Ducken-Quelle fuer Touch
 
 func _ready() -> void:
     sim = HopperSim.new()
-    was_cave_on = sim.cave_on
 
 func _physics_process(delta: float) -> void:
     if sim.dead:
@@ -54,14 +53,18 @@ func _on_death() -> void:
     sim.cave_on = keep_cave
 
 # =============================================================== Eingabe ===
-# Tastatur zuerst (Desktop-Test); Touch analog zum Original (unteres Drittel
-# halten = ducken, sonst tippen = springen) folgt, sobald das auf einem
-# echten Geraet getestet werden kann.
+# Ducken hat ZWEI Quellen (Tastatur, dauerhaft abgefragt; Touch, per Event in
+# touch_duck_held gemerkt - siehe _input()) - deshalb hier EINZIGE Stelle,
+# die sim.ducking tatsaechlich setzt (als ODER beider Quellen), einmal pro
+# Physik-Frame. BUG gefunden (Feedback: "ducken funktioniert auf dem handy
+# nicht"): diese Funktion rief vorher IMMER sim.set_ducking(false), sobald
+# keine Taste gedrueckt war - das ueberschrieb touch_duck_held aus _input()
+# im naechsten Frame sofort wieder, ganz gleich ob der Finger noch unten
+# gehalten wurde (ScreenTouch-Events feuern nur einmal bei Druck/Loslassen,
+# nicht laufend waehrend des Haltens).
 func _handle_input() -> void:
-    if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
-        sim.set_ducking(true)
-    else:
-        sim.set_ducking(false)
+    var kb_duck := Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S)
+    sim.set_ducking(kb_duck or touch_duck_held)
 
 func _unhandled_key_input(event: InputEvent) -> void:
     if event is InputEventKey:
@@ -82,11 +85,12 @@ func _input(event: InputEvent) -> void:
         if t.pressed and not bot_mode:
             var h := get_viewport_rect().size.y
             if t.position.y > h * 0.66:
-                sim.set_ducking(true)
+                touch_duck_held = true
             else:
+                touch_duck_held = false
                 sim.jump()
         elif not t.pressed:
-            sim.set_ducking(false)
+            touch_duck_held = false
             if not bot_mode:
                 sim.end_jump()
 
