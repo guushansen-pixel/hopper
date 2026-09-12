@@ -221,6 +221,43 @@ zeigen korrektes Layout, lesbaren Text und richtige dynamische Inhalte
 (Sperrzustand des Hoehlen-Buttons, "Neuer Rekord!"-Anzeige, Button-Text-
 Wechsel je nach Kontext).
 
+**Phase 7 (finaler Soak-Test + echte Paket-ID-Umstellung + erster echter
+Release)**: fertig. Finaler Regressions-Soak vor der Umstellung: je 3600s
+Wueste UND Hoehle, drei Seeds (1/2/3) - Wueste 7-11 Tode/3600s (deutlich
+unter der historisch akzeptierten Rate), Hoehle 0 Tode/3600s bei allen
+Seeds, "geschafft"-Mechanik feuert stabil (52-55x/Lauf) ohne die Fairness
+zu beeinflussen, Reaktionsfenster/Hoehen-Clearance unveraendert gegenueber
+allen frueheren Phasen - keine Regression durch Phase 6.
+
+**Paket-ID-Umstellung**: `com.daniel.hopper.godot` -> `com.daniel.hopper`
+(dieselbe ID wie die aktuell shippende WebView-App), Label
+"HopperBootstrap" -> "Hopper", Version 0.6(7) -> 2.0(34) - bewusst ueber
+der WebView-Versionscode 33, damit eine Installation als Update ueber die
+bestehende App funktioniert statt als Downgrade abgelehnt zu werden.
+Verifiziert per `apksigner verify --print-certs`: identisches
+Signatur-Zertifikat (SHA-256-Fingerabdruck) wie die WebView-APK, da
+beide denselben geteilten `apk-builder`-Release-Keystore nutzen -
+**diese Godot-APK installiert sich auf einem Geraet mit der bestehenden
+Hopper-App als direktes Update, nicht parallel** (siehe Warnhinweis beim
+Ausliefern).
+
+**App-Icon nachgezogen** (explizite Nutzer-Entscheidung: jetzt statt
+spaeter): Godots Android-Export ohne Custom-Gradle-Build akzeptiert nur
+Raster-PNGs fuer `launcher_icons/*`, kein Vector-Drawable-XML wie beim
+WebView-Build. Das bestehende `hopper/icon.xml` (Android Vector Drawable)
+wurde 1:1 als SVG uebertragen (Android-`pathData` und SVG-Pfadsyntax sind
+kompatibel, reine Attribut-Umbenennung) und per einmaligem Dev-Skript
+(`godot/tests/render_icon.gd`, nutzt `Image.load_svg_from_string()` -
+reine CPU-Rasterung, funktioniert auch `--headless`) zu den drei von Godot
+geforderten PNGs gerendert (Vordergrund/Hintergrund fuer das adaptive
+Icon, plus ein zusammengesetztes Legacy-Icon). Verifiziert durch
+Entpacken der fertig gebauten APK und Sichtpruefung des tatsaechlich
+gepackten Icons (nicht nur der Quelldateien) - zeigt korrekt die
+Laeufer-Silhouette auf orangem Grund, kein Godot-Standard-Icon mehr.
+`export_filter`/`exclude_filter` in `export_presets.cfg` zusaetzlich
+verschaerft, damit `tests/` (Dev-/Soak-Skripte) und die SVG-Icon-Quelle
+nicht mehr mit in die shippende APK gepackt werden.
+
 ## Bauen
 
 ```powershell

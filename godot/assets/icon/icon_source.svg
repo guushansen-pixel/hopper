@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+    <!-- Direkt aus hopper/icon.xml (Android Vector Drawable) uebernommen -
+         Android-pathData und SVG-Pfadsyntax sind kompatibel (gleiche
+         Kommandos: M/h/v/a/z), daher reine Attribut-Umbenennung
+         (android:fillColor -> fill, android:pathData -> d), keine
+         geometrische Aenderung. -->
+
+    <!-- Schwanz -->
+    <path fill="#FFFFFF" d="M27,56 h9 a4,4 0 0 1 4,4 a4,4 0 0 1 -4,4 h-9 a4,4 0 0 1 -4,-4 a4,4 0 0 1 4,-4 z" />
+
+    <!-- Hinteres Bein -->
+    <path fill="#FFFFFF" d="M40.5,75 h2 a4.5,4.5 0 0 1 4.5,4.5 a4.5,4.5 0 0 1 -4.5,4.5 h-2 a4.5,4.5 0 0 1 -4.5,-4.5 a4.5,4.5 0 0 1 4.5,-4.5 z" />
+
+    <!-- Vorderes Bein -->
+    <path fill="#FFFFFF" d="M55.5,75 h4 a3.5,3.5 0 0 1 3.5,3.5 a3.5,3.5 0 0 1 -3.5,3.5 h-4 a3.5,3.5 0 0 1 -3.5,-3.5 a3.5,3.5 0 0 1 3.5,-3.5 z" />
+
+    <!-- Rumpf -->
+    <path fill="#FFFFFF" d="M43,46 h9 a12,12 0 0 1 12,12 v7 a12,12 0 0 1 -12,12 h-9 a12,12 0 0 1 -12,-12 v-7 a12,12 0 0 1 12,-12 z" />
+
+    <!-- Ohr -->
+    <path fill="#FFFFFF" d="M63.5,22 a3.5,3.5 0 0 1 3.5,3.5 v4 a3.5,3.5 0 0 1 -3.5,3.5 a3.5,3.5 0 0 1 -3.5,-3.5 v-4 a3.5,3.5 0 0 1 3.5,-3.5 z" />
+
+    <!-- Kopf -->
+    <path fill="#FFFFFF" d="M66,31 h5 a10,10 0 0 1 10,10 v3 a10,10 0 0 1 -10,10 h-5 a10,10 0 0 1 -10,-10 v-3 a10,10 0 0 1 10,-10 z" />
+
+    <!-- Schnauze -->
+    <path fill="#FFFFFF" d="M80,41 h1 a4,4 0 0 1 4,4 v1 a4,4 0 0 1 -4,4 h-1 a4,4 0 0 1 -4,-4 v-1 a4,4 0 0 1 4,-4 z" />
+
+    <!-- Auge -->
+    <path fill="#2B3542" d="M69,39 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0 z" />
+</svg>
