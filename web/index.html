@@ -171,14 +171,15 @@
   .switch[aria-checked="true"] { background: var(--btnOn); box-shadow: none; }
   .switch[aria-checked="true"]::after { transform: translateX(20px); }
 
-  .levels { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 14px 0 0; }
-  .level { flex-direction: column; gap: 5px; padding: 14px 8px 12px; border: 2px solid transparent; position: relative; }
+  .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 14px 0 0; }
+  .level { flex-direction: column; gap: 4px; padding: 11px 3px 9px; border: 2px solid transparent; position: relative; }
   .level[aria-pressed="true"] { border-color: var(--sel); }
-  .level .lvlName { font-size: 13px; font-weight: 700; }
-  .level .lvlSub { font-size: 11px; color: var(--soft); font-weight: 500; }
+  .level .lvlIcon { width: 22px; height: 22px; }
+  .level .lvlName { font-size: 12px; font-weight: 700; }
+  .level .lvlSub { font-size: 9.5px; color: var(--soft); font-weight: 500; }
   .level.locked { opacity: .5; }
   .level .lock {
-    position: absolute; top: 8px; right: 8px; width: 20px; height: 20px;
+    position: absolute; top: 5px; right: 5px; width: 16px; height: 16px;
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
     background: var(--glassBtn); color: var(--soft); margin: 0; padding: 0;
   }
@@ -293,6 +294,21 @@
         <span class="lvlName">Level 2</span>
         <span class="lvlSub">Hoehle</span>
         <span class="lock" id="lvlCaveLock" hidden>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor"
+               stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="10.5" width="14" height="10" rx="2.4"/>
+            <path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/>
+          </svg>
+        </span>
+      </button>
+      <button class="level" id="lvlLava" aria-pressed="false" aria-label="Level 3: Lavahoehle">
+        <svg class="lvlIcon" viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 5c1.5 4-3 6-3 10a3 3 0 0 0 6 0c0-1.5-1-2.5-1-4 2 1.5 4 4.5 4 8a6 6 0 0 1-12 0c0-6 4-9 6-14Z"/>
+        </svg>
+        <span class="lvlName">Level 3</span>
+        <span class="lvlSub">Lavahoehle</span>
+        <span class="lock" id="lvlLavaLock" hidden>
           <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor"
                stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
             <rect x="5" y="10.5" width="14" height="10" rx="2.4"/>
@@ -547,6 +563,11 @@ var LAST_KEY = "hopper.last";
 var CAVE_HIGH_KEY = "hopper.cave.highscore";
 var CAVE_LAST_KEY = "hopper.cave.last";
 var CAVE_UNLOCK_KEY = "hopper.caveUnlocked";
+// Level 3 (Lavahoehle) ist wiederum ein eigener, getrennter Lauf - genau
+// dasselbe Muster wie bei Level 2 oben, eine Ebene tiefer.
+var LAVA_HIGH_KEY = "hopper.lava.highscore";
+var LAVA_LAST_KEY = "hopper.lava.last";
+var LAVA_UNLOCK_KEY = "hopper.lavaUnlocked";
 
 // Dauerhafte Freischaltung: sobald die Hoehle einmal im echten Spiel
 // (nicht im Vorfuehrmodus) erreicht wurde, bleibt sie fuer immer waehlbar.
@@ -557,6 +578,19 @@ function unlockCave() {
   caveUnlocked = true;
   try { localStorage.setItem(CAVE_UNLOCK_KEY, "1"); } catch (e) {}
 }
+var lavaUnlocked = false;
+try { lavaUnlocked = localStorage.getItem(LAVA_UNLOCK_KEY) === "1"; } catch (e) {}
+function unlockLava() {
+  if (lavaUnlocked) { return; }
+  lavaUnlocked = true;
+  try { localStorage.setItem(LAVA_UNLOCK_KEY, "1"); } catch (e) {}
+}
+// Welcher Highscore-Key gerade gilt (Wueste/Hoehle/Lava) - an mehreren
+// Stellen gebraucht (die() etc.), deshalb ein Helper statt wiederholter
+// 3-Wege-Ternaries. Braucht ein bereits existierendes state-Objekt, also
+// nicht in newGame() selbst verwendbar (dort wird state gerade erst gebaut).
+function zoneHighKey() { return state.lavaOn ? LAVA_HIGH_KEY : (state.caveOn ? CAVE_HIGH_KEY : HIGH_KEY); }
+function zoneLastKey() { return state.lavaOn ? LAVA_LAST_KEY : (state.caveOn ? CAVE_LAST_KEY : LAST_KEY); }
 
 // Dauerhafter Muenzstand: eigene Waehrung, getrennt vom Score-Bonus (+25 pro
 // Muenze auf state.bonus, wirkt nur auf den Lauf-Score) - ueberlebt einzelne
@@ -603,7 +637,11 @@ function buyItem(kind, id, price) {
   return true;
 }
 
-var settings = { music: true, sfx: true, shake: true, cycle: true, startCave: false };
+// startLava additiv statt startCave umzubauen: bestehende gespeicherte
+// Settings-Objekte laden dieses neue Feld einfach mit Default false, kein
+// Migrationsproblem. Level-3-Auswahl setzt immer BEIDE Felder (Lava setzt
+// die Hoehlen-Kulisse voraus).
+var settings = { music: true, sfx: true, shake: true, cycle: true, startCave: false, startLava: false };
 var look = { color: "auto", hat: "none", shape: "dog" };
 
 // Drei Silhouetten statt nur einer - Ohren und Schwanz unterscheiden sich,
@@ -895,6 +933,10 @@ var ENTER_ARCH_OFFSET = 460;
 // verschiedene Zahlensysteme (skalierte Punktzahl UND Prozent) fuer
 // dieselbe Sache nebeneinander existieren.
 var CAVE_START = 3000;
+// Analog zu CAVE_START, aber als Hoehlen-Score (nicht Wuesten-Score) - der
+// Punkt INNERHALB eines Hoehlenlaufs, ab dem es in die Lavahoehle
+// weitergeht. Erster Schuss, noch nicht Soak-getunt wie CAVE_START.
+var LAVA_START = 4000;
 function pctScore(raw) { return Math.min(100, Math.floor(raw / CAVE_START * 100)); }
 function fmtScore(raw, caveOn) { return caveOn ? pad5(raw) : (pctScore(raw) + "%"); }
 var CAVE_MIN_GAP = 158, CAVE_MAX_GAP = 210, CAVE_WAVELEN = 3200;
@@ -945,17 +987,21 @@ function newGame(attract) {
   // langsam, nicht die Fortsetzung von Level 1), eigener Score bei 0, eigener
   // Highscore. Nur waehlbar, wenn die Hoehle schon einmal erreicht wurde -
   // startCave koennte sonst veraltet "an" im Speicher stehen, ohne dass
-  // caveUnlocked ebenfalls wahr ist.
+  // caveUnlocked ebenfalls wahr ist. Level 3 (Lavahoehle) genauso, eine
+  // Ebene tiefer - startInLava impliziert startInCave (die Hoehlen-Kulisse
+  // ist Grundlage der Lavahoehle, siehe state.caveOn unten).
   var startInCave = settings.startCave && caveUnlocked;
+  var startInLava = settings.startLava && lavaUnlocked;
   state = {
     phase: "running", attract: !!attract,
     speed: SPEED_START, distance: 0, score: 0,
-    high: readNum(startInCave ? CAVE_HIGH_KEY : HIGH_KEY),
-    last: readNum(startInCave ? CAVE_LAST_KEY : LAST_KEY),
+    high: readNum(startInLava ? LAVA_HIGH_KEY : startInCave ? CAVE_HIGH_KEY : HIGH_KEY),
+    last: readNum(startInLava ? LAVA_LAST_KEY : startInCave ? CAVE_LAST_KEY : LAST_KEY),
     time: 0, spawnIn: 90, shake: 0, flash: 0, deadT: 0,
     mountainOn: false, mountainT: 0, mountainVis: 0,
-    caveOn: startInCave, caveVis: startInCave ? 1 : 0,
-    entering: false, enterT: 0, enterArchX: 0,
+    caveOn: startInCave || startInLava, caveVis: (startInCave || startInLava) ? 1 : 0,
+    lavaOn: startInLava,
+    entering: false, enterT: 0, enterArchX: 0, enteringToLava: false,
     bonus: 0, crystalIn: 260
   };
   runner = {
@@ -975,7 +1021,7 @@ function newGame(attract) {
   // die caveOn-Sperre unten im Zyklus-Trigger). Sofort auf night=1 setzen
   // statt erst hinueberzublenden, damit ein frisch gestarteter Hoehlenlauf
   // nicht kurz in Tagesfarben aufblitzt.
-  night = startInCave ? 1 : 0; nightDir = 0; nextNightAt = 700;
+  night = (startInCave || startInLava) ? 1 : 0; nightDir = 0; nextNightAt = 700;
   nextMountainAt = 700 + Math.random() * 200;
   applyTheme(night);
 }
@@ -1306,11 +1352,27 @@ function update(dt) {
         SFX.enter();
       }
     }
+    // Level 2 (Hoehle) endet hier genauso, eine Ebene tiefer - Level 3
+    // (Lavahoehle) beginnt bei LAVA_START INNERHALB des Hoehlenlaufs.
+    // state.enteringToLava unterscheidet fuer die entering-Abschluss-Logik
+    // unten, welches Ziel-Level nach der Sequenz drankommt.
+    if (state.caveOn && !state.lavaOn && !state.entering && state.score >= LAVA_START) {
+      if (state.attract) {
+        state.lavaOn = true;
+      } else {
+        state.entering = true;
+        state.enterT = 0;
+        state.enterArchX = RUNNER_X + ENTER_ARCH_OFFSET;
+        obstacles.length = 0;
+        state.enteringToLava = true;
+        SFX.enter();
+      }
+    }
     if (state.entering) {
       state.enterT += dt;
       if (state.enterT >= ENTER_DURATION) {
         state.entering = false;
-        completeLevel();
+        if (state.enteringToLava) { completeCaveLevel(); } else { completeLevel(); }
         return;
       }
     }
@@ -1613,8 +1675,8 @@ function die() {
   if (settings.shake) { state.shake = 1; }
   deathBurst(RUNNER_X + 24, groundY - 26 + runner.y);
   SFX.die();
-  var hk = state.caveOn ? CAVE_HIGH_KEY : HIGH_KEY;
-  var lk = state.caveOn ? CAVE_LAST_KEY : LAST_KEY;
+  var hk = zoneHighKey();
+  var lk = zoneLastKey();
   var record = state.score > state.high;
   if (record) { state.high = state.score; writeNum(hk, state.high); }
   state.last = state.score;
@@ -1648,6 +1710,35 @@ function completeLevel() {
   saveJson(SET_KEY, settings);
   SFX.point();
   showLevelComplete();
+}
+
+// Level 2 (Hoehle) endet hier genauso, eine Ebene tiefer - Erreichen von
+// LAVA_START INNERHALB eines Hoehlenlaufs. Eigene Funktion statt
+// completeLevel() wiederzuverwenden: completeLevel() ist Wueste-spezifisch
+// (schreibt HIGH_KEY/LAST_KEY, setzt settings.startCave) - ein Hoehle->Lava-
+// Uebergang braucht CAVE_HIGH_KEY/CAVE_LAST_KEY und settings.startLava.
+function completeCaveLevel() {
+  if (state.attract) {
+    state.lavaOn = true;
+    return;
+  }
+  state.phase = "cleared"; state.deadT = 0;
+  unlockLava();
+  var record = state.score > state.high;
+  if (record) { state.high = state.score; writeNum(CAVE_HIGH_KEY, state.high); }
+  state.last = state.score;
+  writeNum(CAVE_LAST_KEY, state.score);
+  // Naechster Lauf zielt automatisch auf Level 3.
+  settings.startCave = true;
+  settings.startLava = true;
+  saveJson(SET_KEY, settings);
+  SFX.point();
+  showLevelComplete({
+    caveFmt: true,
+    title: "Level 2 geschafft!",
+    unlockedText: "Lavahoehle freigeschaltet",
+    nextLabel: "Level 3 spielen"
+  });
 }
 
 // =========================================================== Zeichnen ======
@@ -2862,6 +2953,8 @@ var elPause = document.getElementById("pauseBtn");
 var elLvlDesert = document.getElementById("lvlDesert");
 var elLvlCave = document.getElementById("lvlCave");
 var elLvlCaveLock = document.getElementById("lvlCaveLock");
+var elLvlLava = document.getElementById("lvlLava");
+var elLvlLavaLock = document.getElementById("lvlLavaLock");
 var settingsFrom = "menu";
 
 function show(name) {
@@ -2877,17 +2970,24 @@ function show(name) {
 }
 function refreshMenu() {
   // Zeigt den Highscore des gerade gewaehlten Levels, nicht immer Level 1 -
-  // sonst wirkt der Wert nach dem Umschalten auf Level 2 falsch/veraltet.
+  // sonst wirkt der Wert nach dem Umschalten falsch/veraltet. lavaMode
+  // impliziert caveMode (Level 3 setzt startCave+startLava, siehe die
+  // Klick-Handler unten) - caveMode entscheidet nur ueber pad5-vs-Prozent
+  // (fmtScore), gilt also fuer Level 2 UND 3 gleichermassen.
+  var lavaMode = settings.startLava && lavaUnlocked;
   var caveMode = settings.startCave && caveUnlocked;
-  var mHigh = readNum(caveMode ? CAVE_HIGH_KEY : HIGH_KEY);
-  var mLast = readNum(caveMode ? CAVE_LAST_KEY : LAST_KEY);
+  var mHigh = readNum(lavaMode ? LAVA_HIGH_KEY : caveMode ? CAVE_HIGH_KEY : HIGH_KEY);
+  var mLast = readNum(lavaMode ? LAVA_LAST_KEY : caveMode ? CAVE_LAST_KEY : LAST_KEY);
   document.getElementById("mHigh").textContent = fmtScore(mHigh, caveMode);
   document.getElementById("mLast").textContent = fmtScore(mLast, caveMode);
   document.getElementById("mCoins").textContent = pad5(totalCoins);
   elLvlDesert.setAttribute("aria-pressed", caveMode ? "false" : "true");
-  elLvlCave.setAttribute("aria-pressed", caveMode ? "true" : "false");
+  elLvlCave.setAttribute("aria-pressed", (caveMode && !lavaMode) ? "true" : "false");
+  elLvlLava.setAttribute("aria-pressed", lavaMode ? "true" : "false");
   elLvlCave.classList.toggle("locked", !caveUnlocked);
   elLvlCaveLock.hidden = caveUnlocked;
+  elLvlLava.classList.toggle("locked", !lavaUnlocked);
+  elLvlLavaLock.hidden = lavaUnlocked;
 }
 function toMenu() {
   newGame(true);
@@ -2920,18 +3020,22 @@ function showGameOver(record) {
   document.getElementById("btnAgain").textContent = "Nochmal";
   setTimeout(function () { if (state.phase === "dead") { show("over"); } }, 420);
 }
-// Level 1 (Wueste) endet erfolgreich statt durch Sterben - eigener Text und
-// eigener Primary-Button auf demselben Overlay wie showGameOver(), damit
-// nicht ein zweites, fast identisches Overlay gepflegt werden muss.
-// Immer Level 1 (siehe completeLevel()), also immer die Prozent-Anzeige -
-// hier faellt sie planmaessig auf 100% (siehe pctScore()-Deckelung).
-function showLevelComplete() {
-  document.getElementById("oScoreLabel").textContent = "Fortschritt";
-  document.getElementById("oScore").textContent = fmtScore(state.score, false);
-  document.getElementById("oHigh").textContent = fmtScore(state.high, false);
-  document.getElementById("overTitle").textContent = "Level 1 geschafft!";
-  document.getElementById("overTag").innerHTML = "Hoehle freigeschaltet";
-  document.getElementById("btnAgain").textContent = "Level 2 spielen";
+// Ein Level endet erfolgreich statt durch Sterben - eigener Text und eigener
+// Primary-Button auf demselben Overlay wie showGameOver(), damit nicht ein
+// zweites, fast identisches Overlay gepflegt werden muss. opts fehlt (oder
+// leer) = Level 1 (Wueste), das faellt planmaessig auf 100% (Prozent-
+// Anzeige, siehe pctScore()-Deckelung). Level 2->3 (siehe
+// completeCaveLevel()) uebergibt opts.caveFmt=true fuer die fuenfstellige
+// Punktzahl statt Prozent (dort gibt es kein definiertes Ziel).
+function showLevelComplete(opts) {
+  opts = opts || {};
+  var caveFmt = !!opts.caveFmt;
+  document.getElementById("oScoreLabel").textContent = caveFmt ? "Punkte" : "Fortschritt";
+  document.getElementById("oScore").textContent = fmtScore(state.score, caveFmt);
+  document.getElementById("oHigh").textContent = fmtScore(state.high, caveFmt);
+  document.getElementById("overTitle").textContent = opts.title || "Level 1 geschafft!";
+  document.getElementById("overTag").innerHTML = opts.unlockedText || "Hoehle freigeschaltet";
+  document.getElementById("btnAgain").textContent = opts.nextLabel || "Level 2 spielen";
   setTimeout(function () { if (state.phase === "cleared") { show("over"); } }, 420);
 }
 function openSettings(from) { settingsFrom = from; syncSwitches(); show("settings"); SFX.ui(); }
@@ -3123,8 +3227,9 @@ SWITCHES.forEach(function (s) {
 
 elLvlDesert.addEventListener("click", function () {
   audioInit();
-  if (!settings.startCave) { return; }
+  if (!settings.startCave && !settings.startLava) { return; }
   settings.startCave = false;
+  settings.startLava = false;
   saveJson(SET_KEY, settings);
   refreshMenu();
   SFX.ui();
@@ -3145,14 +3250,43 @@ elLvlCave.addEventListener("click", function () {
       lvlCaveTaps = 0;
       unlockCave();
       settings.startCave = true;
+      settings.startLava = false;
       saveJson(SET_KEY, settings);
       refreshMenu();
       SFX.equip();
     }
     return;
   }
-  if (settings.startCave) { return; }
+  if (settings.startCave && !settings.startLava) { return; }
   settings.startCave = true;
+  settings.startLava = false;
+  saveJson(SET_KEY, settings);
+  refreshMenu();
+  SFX.ui();
+});
+// Gleicher Test-Trick fuer Level 3 - ruft unlockLava() auf.
+var lvlLavaTaps = 0, lvlLavaTapAt = 0;
+elLvlLava.addEventListener("click", function () {
+  audioInit();
+  if (!lavaUnlocked) {
+    var nowL = Date.now();
+    if (nowL - lvlLavaTapAt > 1500) { lvlLavaTaps = 0; }
+    lvlLavaTapAt = nowL;
+    lvlLavaTaps++;
+    if (lvlLavaTaps >= 5) {
+      lvlLavaTaps = 0;
+      unlockLava();
+      settings.startCave = true;
+      settings.startLava = true;
+      saveJson(SET_KEY, settings);
+      refreshMenu();
+      SFX.equip();
+    }
+    return;
+  }
+  if (settings.startLava) { return; }
+  settings.startCave = true;
+  settings.startLava = true;
   saveJson(SET_KEY, settings);
   refreshMenu();
   SFX.ui();
