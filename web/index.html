@@ -869,7 +869,7 @@ function newGame(attract) {
     mountainOn: false, mountainT: 0, mountainVis: 0,
     caveOn: startInCave, caveVis: startInCave ? 1 : 0,
     entering: false, enterT: 0, enterArchX: 0,
-    bonus: 0, dripIn: 60, crystalIn: 260
+    bonus: 0, crystalIn: 260
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
@@ -906,6 +906,18 @@ function deathBurst(x, y) {
     var a = Math.random() * Math.PI * 2, sp = 90 + Math.random() * 220;
     spawnParticle(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 90,
                   0.45 + Math.random() * 0.45, 2 + Math.random() * 2.6, "accent");
+  }
+}
+// Kleiner Aufprall-Spritzer, wenn ein "drip"-Tropfen (siehe dripT bei
+// Stalaktit/-saeule) den Boden erreicht - flache, kurze radiale Streuung
+// statt der kreisrunden deathBurst-Explosion, damit es wie Wasser statt
+// wie Staub/Funken wirkt.
+function dripSplash(x, y) {
+  for (var i = 0; i < 4; i++) {
+    var a = Math.PI + Math.random() * Math.PI;
+    var sp = 20 + Math.random() * 45;
+    spawnParticle(x, y, Math.cos(a) * sp, Math.sin(a) * sp * 0.5 - 30,
+                  0.18 + Math.random() * 0.14, 1 + Math.random() * 1.2, "splash");
   }
 }
 
@@ -1275,6 +1287,13 @@ function update(dt) {
     p.t -= dt;
     if (p.t <= 0) { particles.splice(pi, 1); continue; }
     p.vy += 520 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    // Ein fallender Tropfstein-Tropfen endet nicht per Lebenszeit-Ablauf,
+    // sondern sobald er wirklich am Boden ankommt - danach ein kurzer
+    // Spritzer statt eines einfach verblassenden Punkts.
+    if (p.c === "drip" && p.y >= groundY) {
+      dripSplash(p.x, groundY);
+      particles.splice(pi, 1);
+    }
   }
 
   if (state.phase !== "running") { return; }
@@ -1341,11 +1360,11 @@ function update(dt) {
     o.x -= move;
     if (o.kind === "bird" || o.kind === "bat") { o.flap += dt * 10; }
     if (o.kind === "stalactite" || o.kind === "pillar") {
-      // Wassertropfen direkt von der Spitze des jeweiligen Tropfsteins, statt
-      // nur an zufaelligen Deckenpunkten (siehe der bereits vorhandene
-      // allgemeine dripIn-Effekt unten) - macht sichtbar, dass GENAU diese
-      // Formation gerade traeuft. Distanzbasierter Timer (dripT, wie ueberall
-      // sonst in dieser Datei), damit die Tropfrate nicht vom Tempo abhaengt.
+      // Wassertropfen direkt von der Spitze des jeweiligen Tropfsteins - das
+      // ist inzwischen die einzige Quelle fuer Tropfen (der fruehere
+      // allgemeine Zufalls-Drip an beliebigen Deckenpunkten wurde entfernt).
+      // Distanzbasierter Timer (dripT, wie ueberall sonst in dieser Datei),
+      // damit die Tropfrate nicht vom Tempo abhaengt.
       o.dripT -= move;
       if (o.dripT <= 0) {
         o.dripT = 260 + Math.random() * 340;
@@ -1406,16 +1425,6 @@ function update(dt) {
       // drawRock().
       collectibles.push({ x: LW + 20, y: groundY - 24, w: 20, h: 24,
                            variant: Math.floor(Math.random() * 3) });
-    }
-    // Wassertropfen: reine Deko-Partikel von der Decke, reuses particles[]
-    // (siehe drawParticles "drip"-Fall). Bildschirm-x statt Weltkoordinate,
-    // die kurze Lebenszeit macht das Scrollen waehrenddessen irrelevant.
-    state.dripIn -= dx;
-    if (state.dripIn <= 0) {
-      state.dripIn = 90 + Math.random() * 160;
-      var dxp = 40 + Math.random() * (LW - 80);
-      var dyp = groundY - ceilingGapAt(scrollCeiling + dxp);
-      spawnParticle(dxp, dyp, 0, 25, 0.9 + Math.random() * 0.4, 2 + Math.random() * 1.2, "drip");
     }
   }
 
@@ -1700,8 +1709,16 @@ function drawParticles() {
     // aussehen.
     ctx.globalAlpha = a * (p.c === "accent" ? 1 : 0.62);
     ctx.fillStyle = (p.c === "accent") ? theme.accent
-      : (p.c === "drip") ? "#6fc3e0" : theme.dust;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (0.35 + a * 0.65), 0, 6.2832); ctx.fill();
+      : (p.c === "drip" || p.c === "splash") ? "#6fc3e0" : theme.dust;
+    if (p.c === "splash") {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.scale(1, 0.4);
+      ctx.beginPath(); ctx.arc(0, 0, p.s * (0.35 + a * 0.65), 0, 6.2832); ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (0.35 + a * 0.65), 0, 6.2832); ctx.fill();
+    }
   }
   ctx.globalAlpha = 1;
 }
@@ -2162,60 +2179,8 @@ function drawIcicleTexture(x, y, w, h, seed) {
   ctx.globalAlpha = 1;
   ctx.restore();
 }
-// Reflektierende Pfuetze am Boden unter einem Tropfstein - dort, wo die
-// Tropfen von der Spitze (siehe dripT in update()) tatsaechlich ankommen.
-// Canvas 2D hat kein echtes Raytracing/Shader-Pipeline (das braeuchte einen
-// WebGL-Kontext, ein kompletter Umbau der Rendering-Basis dieses Spiels) -
-// derselbe "nass/spiegelnd"-Eindruck laesst sich aber mit reinen 2D-Mitteln
-// erzeugen: ein dunkler Farbverlauf als Wasserflaeche, ein weicher heller
-// Schein von oben (Andeutung einer Spiegelung der Deckenbeleuchtung/des
-// Tropfsteins selbst statt einer exakten gespiegelten Kopie - echte
-// Wasserreflexionen sind ohnehin nie scharf) und ein einzelner wandernder
-// Glanzstreifen, der ueber die Zeit langsam ueber die Flaeche laeuft und
-// damit den einzigen wirklich "shaderhaften" Teil des Effekts liefert
-// (Licht, das sich bewegt, nicht nur eine statische Textur).
-function drawPuddle(o) {
-  G = ctx;
-  var cx = o.x + o.w / 2, py = groundY - 1;
-  var pw = Math.max(50, o.w * 2.2), ph = pw * 0.2;
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(cx, py, pw / 2, ph / 2, 0, 0, 6.2832);
-  ctx.clip();
-
-  var base = ctx.createRadialGradient(cx, py - ph * 0.1, 0, cx, py, pw / 2);
-  base.addColorStop(0, "rgba(70,95,110,0.75)");
-  base.addColorStop(0.6, "rgba(25,38,48,0.65)");
-  base.addColorStop(1, "rgba(8,12,18,0.5)");
-  ctx.fillStyle = base;
-  ctx.fillRect(cx - pw, py - ph * 2, pw * 2, ph * 3);
-
-  var reflH = Math.min(ph * 0.9, 14);
-  var refl = ctx.createLinearGradient(cx, py - reflH, cx, py);
-  refl.addColorStop(0, "rgba(200,215,225,0.30)");
-  refl.addColorStop(1, "rgba(200,215,225,0)");
-  ctx.fillStyle = refl;
-  ctx.beginPath();
-  ctx.moveTo(cx - o.w * 0.35, py);
-  ctx.lineTo(cx, py - reflH);
-  ctx.lineTo(cx + o.w * 0.35, py);
-  ctx.closePath(); ctx.fill();
-
-  var sweep = ((state.time * 36 + o.x * 1.7) % (pw * 2.4)) - pw * 1.2;
-  var sheen = ctx.createLinearGradient(cx + sweep - 10, 0, cx + sweep + 10, 0);
-  sheen.addColorStop(0, "rgba(255,255,255,0)");
-  sheen.addColorStop(0.5, "rgba(255,255,255,0.4)");
-  sheen.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = sheen;
-  ctx.fillRect(cx - pw, py - ph, pw * 2, ph * 2);
-  ctx.restore();
-
-  ctx.strokeStyle = "rgba(190,225,235,0.28)"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.ellipse(cx, py, pw / 2, ph / 2, 0, 0, 6.2832); ctx.stroke();
-}
 function drawStalactite(o) {
   G = ctx;
-  drawPuddle(o);
   ctx.fillStyle = CAVE_ROCK;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
@@ -2231,7 +2196,6 @@ function drawStalactite(o) {
 // durch den man ducken muss. o.stubH ist nur Optik, keine eigene Kollision.
 function drawPillar(o) {
   G = ctx;
-  drawPuddle(o);
   ctx.fillStyle = CAVE_ROCK;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
