@@ -38,17 +38,7 @@
   /* touch-action gehoert auf die Spielflaeche, NICHT auf body: der Wert eines
      Elternelements beschraenkt alle Nachkommen. Mit touch-action:none auf
      body liess sich auch ein Menue mit eigenem pan-y nicht scrollen. */
-  canvas#c { display: block; position: fixed; inset: 0; width: 100%; height: 100%;
-             touch-action: none; z-index: 1; }
-  /* Zweiter, echter WebGL-Kontext NUR fuer die Pfuetzen-Reflexionen (siehe
-     JS-Abschnitt "WebGL-Pfuetzen") - liegt fest hinter #c. #c bekommt an
-     jeder Pfuetzen-Position ein per destination-out ausgestanztes,
-     transparentes Loch, durch das dieser Layer sichtbar wird - alles
-     andere (Laeufer, Hindernisse, Boden) bleibt normales, deckendes 2D-
-     Rendering und ueberdeckt die Pfuetze dadurch weiterhin korrekt, wenn
-     es davor liegt. */
-  canvas#glBg { position: fixed; inset: 0; width: 100%; height: 100%;
-                touch-action: none; pointer-events: none; z-index: 0; }
+  canvas#c { display: block; width: 100%; height: 100%; touch-action: none; }
 
   .overlay {
     position: fixed; inset: 0;
@@ -237,7 +227,6 @@
 </style>
 </head>
 <body>
-<canvas id="glBg"></canvas>
 <canvas id="c"></canvas>
 
 <button id="gearBtn" hidden aria-label="Einstellungen">
@@ -406,7 +395,6 @@ function resize() {
   pv.width = Math.round(150 * dpr); pv.height = Math.round(104 * dpr);
   buildStars();
   ctx.imageSmoothingEnabled = true;
-  resizeGL();
 }
 window.addEventListener("resize", resize);
 window.addEventListener("orientationchange", function () { setTimeout(resize, 120); });
@@ -422,17 +410,27 @@ window.addEventListener("orientationchange", function () { setTimeout(resize, 12
 // NUR fuer dieses eine Detail liefert den gewuenschten echten Shader, ohne
 // den Rest des bereits funktionierenden 2D-Renderings anzufassen.
 //
-// Layering: #glBg liegt fest HINTER #c (siehe CSS). #c bleibt fuer alles
-// andere komplett deckend - nur an jeder Pfuetzen-Position wird per
-// destination-out ein transparentes Loch in den bereits gezeichneten Boden
-// gestanzt (siehe punchPuddleHole() unten, aufgerufen aus render() direkt
-// nach drawGround()), durch das dieser WebGL-Layer sichtbar wird. Alles, was
-// im 2D-Canvas DANACH ueber diese Stelle gezeichnet wird (der haengende
-// Tropfstein selbst, der Laeufer, falls er zufaellig dort steht), bleibt
-// deckend und ueberlagert die Pfuetze weiterhin korrekt - dieselbe
-// Z-Reihenfolge wie vorher, jetzt nur mit echtem Shader-Inhalt darunter statt
-// eines 2D-Farbverlaufs.
-var glCanvas = document.getElementById("glBg");
+// V25 hatte dafuer einen ZWEITEN, ueberlagerten <canvas>-Layer benutzt (fest
+// hinter #c, ein transparentes Loch per destination-out gestanzt). Nutzer-
+// feedback: "das Wasser blinkt und wackelt, wenn man vorbeilaeuft". Ursache:
+// zwei SEPARATE Canvas-Elemente werden vom Browser/der GPU potenziell als
+// zwei unabhaengige Compositor-Ebenen behandelt, die nicht zwingend im
+// exakt selben Frame aktualisiert werden (Blinken) - und der Bildschirm-
+// Ruettel-Effekt (state.shake, siehe update()) wurde nur auf den 2D-Canvas
+// angewendet (ctx.translate in render()), nicht auf den zweiten WebGL-Layer,
+// der dadurch bei jeder Landung kurz gegen das Loch verrutschte (Wackeln).
+//
+// Fix: kein zweiter sichtbarer Layer mehr. glCanvas ist jetzt ein rein
+// internes, nie ins DOM eingehaengtes Offscreen-Canvas - pro Pfuetze wird
+// der Shader dort in genau der benoetigten Pixelgroesse gerendert und das
+// Ergebnis per ctx.drawImage() DIREKT in denselben 2D-Canvas #c gezeichnet,
+// an exakt der Stelle, an der frueher drawPuddle() seinen Farbverlauf
+// gemalt hat (innerhalb von drawStalactite()/drawPillar(), im normalen
+// Hindernis-Zeichendurchlauf). Dadurch ist es nur noch EIN Compositor-Layer
+// (kein Blinken mehr moeglich) und drawImage erbt automatisch dieselbe
+// ctx-Transformation wie jede andere Zeichnung - inklusive eines eventuell
+// aktiven Ruettel-Versatzes (kein Wackeln mehr).
+var glCanvas = document.createElement("canvas");
 var gl = null, glProgram = null, glOk = false;
 var glUniforms = {};
 function compileShader(src, type) {
@@ -442,16 +440,15 @@ function compileShader(src, type) {
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { return null; }
   return s;
 }
-// Vertex-Shader: ein wiederverwendetes 0..1-Einheitsquadrat, pro Pfuetze nur
-// per u_rect (Clip-Space-Position/-Groesse) verschoben/skaliert - spart, das
-// Vertex-Buffer pro Pfuetze neu zu befuellen.
+// Vertex-Shader: immer das volle Ziel-Canvas (-1..1) - jede Pfuetze bekommt
+// ihr eigenes, exakt passend zugeschnittenes Offscreen-Canvas (siehe
+// drawPuddleGL()), es muss also innerhalb des Shaders nicht mehr positioniert
+// werden.
 var GL_VS = "attribute vec2 a_uv;\n" +
   "varying vec2 v_uv;\n" +
-  "uniform vec4 u_rect;\n" +
   "void main() {\n" +
   "  v_uv = a_uv;\n" +
-  "  vec2 pos = u_rect.xy + a_uv * u_rect.zw;\n" +
-  "  gl_Position = vec4(pos, 0.0, 1.0);\n" +
+  "  gl_Position = vec4(a_uv * 2.0 - 1.0, 0.0, 1.0);\n" +
   "}";
 // Fragment-Shader: prozedurales Wellenfeld -> daraus abgeleitete Normale ->
 // echte Blinn-Phong-Glanzlicht- und Fresnel-Rechnung pro Pixel (kein
@@ -462,14 +459,15 @@ var GL_FS = "precision mediump float;\n" +
   "varying vec2 v_uv;\n" +
   "uniform float u_time;\n" +
   "uniform float u_seed;\n" +
+  "uniform float u_scroll;\n" +
   "void main() {\n" +
   "  vec2 uv = v_uv - 0.5;\n" +
   "  float ellipse = (uv.x*uv.x)/(0.25) + (uv.y*uv.y)/(0.0484);\n" +
   "  if (ellipse > 1.0) { discard; }\n" +
   "  float t = u_time * 1.6 + u_seed;\n" +
   "  vec2 grad = vec2(\n" +
-  "    cos(uv.x*10.0 + t*1.3) * 5.0,\n" +
-  "    cos(uv.y*14.0 - t*0.9 + uv.x*6.0) * 4.2\n" +
+  "    cos(uv.x*10.0 + t*1.3 + u_scroll) * 5.0,\n" +
+  "    cos(uv.y*14.0 - t*0.9 + uv.x*6.0 + u_scroll*0.6) * 4.2\n" +
   "  );\n" +
   "  vec3 normal = normalize(vec3(-grad*0.05, 1.0));\n" +
   "  vec3 lightDir = normalize(vec3(-0.35, 0.55, 0.75));\n" +
@@ -507,41 +505,38 @@ var GL_FS = "precision mediump float;\n" +
     var loc = gl.getAttribLocation(glProgram, "a_uv");
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    glUniforms.rect = gl.getUniformLocation(glProgram, "u_rect");
     glUniforms.time = gl.getUniformLocation(glProgram, "u_time");
     glUniforms.seed = gl.getUniformLocation(glProgram, "u_seed");
+    glUniforms.scroll = gl.getUniformLocation(glProgram, "u_scroll");
     gl.useProgram(glProgram);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     glOk = true;
   } catch (e) { glOk = false; }
 })();
-function resizeGL() {
-  if (!glOk) { return; }
-  glCanvas.width = cv.width; glCanvas.height = cv.height;
-  gl.viewport(0, 0, glCanvas.width, glCanvas.height);
-}
-// Logische Spielfeld-Koordinate (dieselbe wie ueberall sonst im Code) in
-// Clip-Space (-1..1), dieselbe Transformation wie ctx.setTransform() in
-// render(), nur eben fuer den zweiten Kontext nachvollzogen.
-function toClip(lx, ly) {
-  var px = lx * unit * dpr, py = ly * unit * dpr;
-  return [ (px / glCanvas.width) * 2 - 1, 1 - (py / glCanvas.height) * 2 ];
-}
-function renderPuddlesGL() {
-  if (!glOk) { return; }
+// Rendert EINE Pfuetze in ein exakt passend großes Offscreen-WebGL-Canvas
+// und blittet das Ergebnis direkt in den Haupt-2D-Kontext - dieselbe
+// ctx-Transformation (inkl. Ruettel-Versatz) wie jede andere 2D-Zeichnung,
+// da es derselbe Aufruf innerhalb desselben render()-Durchlaufs ist.
+function drawPuddleGL(o) {
+  var b = puddleBounds(o);
+  var pxW = Math.max(1, Math.round((b.right - b.left) * unit * dpr));
+  var pxH = Math.max(1, Math.round((b.bottom - b.top) * unit * dpr));
+  glCanvas.width = pxW; glCanvas.height = pxH;
+  gl.viewport(0, 0, pxW, pxH);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  if (!state.caveOn) { return; }
-  for (var i = 0; i < obstacles.length; i++) {
-    var o = obstacles[i];
-    if (o.kind !== "stalactite" && o.kind !== "pillar") { continue; }
-    var b = puddleBounds(o);
-    var tl = toClip(b.left, b.top), br = toClip(b.right, b.bottom);
-    gl.uniform4f(glUniforms.rect, tl[0], tl[1], br[0] - tl[0], br[1] - tl[1]);
-    gl.uniform1f(glUniforms.time, state.time);
-    gl.uniform1f(glUniforms.seed, (o.x % 97) * 1.7);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }
+  gl.uniform1f(glUniforms.time, state.time);
+  gl.uniform1f(glUniforms.seed, (o.x % 97) * 1.7);
+  // Nutzerfeedback: "vom Scrolling ist es komisch" - das Wellenmuster hing
+  // bisher nur an state.time, war also beim Scrollen optisch vom Boden
+  // "abgeloest" (wanderte nicht mit, anders als jede andere Bodentextur in
+  // der Hoehle). u_scroll haengt an o.x (bewegt sich exakt im Weltscroll-
+  // Tempo, wie scrollCeiling ueberall sonst) und wird zur Wellen-Phase
+  // addiert, damit das Muster sichtbar mit dem Boden mitwandert statt
+  // unabhaengig ueber der Pfuetze zu schweben.
+  gl.uniform1f(glUniforms.scroll, o.x * 0.035);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.drawImage(glCanvas, b.left, b.top, b.right - b.left, b.bottom - b.top);
 }
 
 // ============================================================== Farben =====
@@ -2307,20 +2302,10 @@ function drawIcicleTexture(x, y, w, h, seed) {
 }
 // Reflektierende Pfuetze am Boden unter einem Tropfstein - dort, wo die
 // Tropfen von der Spitze (siehe dripT in update()) tatsaechlich ankommen.
-// Canvas 2D hat kein echtes Raytracing/Shader-Pipeline (das braeuchte einen
-// WebGL-Kontext, ein kompletter Umbau der Rendering-Basis dieses Spiels) -
-// derselbe "nass/spiegelnd"-Eindruck laesst sich aber mit reinen 2D-Mitteln
-// erzeugen: ein dunkler Farbverlauf als Wasserflaeche, ein weicher heller
-// Schein von oben (Andeutung einer Spiegelung der Deckenbeleuchtung/des
-// Tropfsteins selbst statt einer exakten gespiegelten Kopie - echte
-// Wasserreflexionen sind ohnehin nie scharf) und ein einzelner wandernder
-// Glanzstreifen, der ueber die Zeit langsam ueber die Flaeche laeuft und
-// damit den einzigen wirklich "shaderhaften" Teil des Effekts liefert
-// (Licht, das sich bewegt, nicht nur eine statische Textur).
-// Gemeinsame Pfuetzen-Ellipse (Mitte + Radien in Logik-Koordinaten) - von
-// sowohl dem 2D-Loch-Stanzen unten als auch renderPuddlesGL() (siehe
-// WebGL-Pfuetzen-Abschnitt oben) benutzt, damit Loch und Shader-Flaeche
-// exakt uebereinander liegen.
+// Gemeinsame Ellipse (Mitte + Radien in Logik-Koordinaten), von drawPuddle()/
+// drawPuddleGL() (echter WebGL-Shader, siehe WebGL-Pfuetzen-Abschnitt weiter
+// oben) und dem 2D-Fallback benutzt, damit beide exakt dieselbe Flaeche
+// treffen.
 function puddleBounds(o) {
   var cx = o.x + o.w / 2, py = groundY - 1;
   var pw = Math.max(50, o.w * 2.2), ph = pw * 0.2;
@@ -2360,14 +2345,10 @@ function drawPuddle2DFallback(o) {
 function drawPuddle(o) {
   G = ctx;
   if (!glOk) { drawPuddle2DFallback(o); return; }
+  drawPuddleGL(o);
   var b = puddleBounds(o);
   var cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2;
   var rx = (b.right - b.left) / 2, ry = (b.bottom - b.top) / 2;
-  ctx.save();
-  ctx.globalCompositeOperation = "destination-out";
-  ctx.fillStyle = "rgba(0,0,0,1)";
-  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 6.2832); ctx.fill();
-  ctx.restore();
   ctx.strokeStyle = "rgba(190,225,235,0.28)"; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 6.2832); ctx.stroke();
 }
@@ -2626,7 +2607,6 @@ function drawHud() {
 }
 
 function render() {
-  renderPuddlesGL();
   ctx.setTransform(unit * dpr, 0, 0, unit * dpr, 0, 0);
   drawSky(); drawStars();
   if (!state.caveOn) { drawOrb(); }   // unter Tage keine Sonne/kein Mond
