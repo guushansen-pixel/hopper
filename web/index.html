@@ -534,7 +534,7 @@ function drawPuddleGL(o) {
   // Tempo, wie scrollCeiling ueberall sonst) und wird zur Wellen-Phase
   // addiert, damit das Muster sichtbar mit dem Boden mitwandert statt
   // unabhaengig ueber der Pfuetze zu schweben.
-  gl.uniform1f(glUniforms.scroll, o.x * 0.035);
+  gl.uniform1f(glUniforms.scroll, o.x * 0.004);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.drawImage(glCanvas, b.left, b.top, b.right - b.left, b.bottom - b.top);
 }
