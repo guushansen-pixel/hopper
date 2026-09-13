@@ -977,7 +977,7 @@ function spawnStalactite() {
   var tip = STALACTITE_TIP_MIN + Math.random() * (STALACTITE_TIP_MAX - STALACTITE_TIP_MIN);
   var h = Math.max(10, gap - tip);
   obstacles.push({ kind: "stalactite", x: spawnX, y: groundY - gap, w: 34, h: h,
-                   seed: Math.random() * 1000 | 0 });
+                   seed: Math.random() * 1000 | 0, dripT: 40 + Math.random() * 200 });
   return 170 + Math.random() * 80;
 }
 
@@ -998,7 +998,8 @@ function spawnPillar() {
   var tip = PILLAR_TIP_MIN + Math.random() * (PILLAR_TIP_MAX - PILLAR_TIP_MIN);
   var h = Math.max(10, gap - tip);
   obstacles.push({ kind: "pillar", x: spawnX, y: groundY - gap, w: 30, h: h,
-                   stubH: 12 + Math.random() * 8, seed: Math.random() * 1000 | 0 });
+                   stubH: 12 + Math.random() * 8, seed: Math.random() * 1000 | 0,
+                   dripT: 40 + Math.random() * 200 });
   return 220 + Math.random() * 100;
 }
 
@@ -1339,6 +1340,19 @@ function update(dt) {
     }
     o.x -= move;
     if (o.kind === "bird" || o.kind === "bat") { o.flap += dt * 10; }
+    if (o.kind === "stalactite" || o.kind === "pillar") {
+      // Wassertropfen direkt von der Spitze des jeweiligen Tropfsteins, statt
+      // nur an zufaelligen Deckenpunkten (siehe der bereits vorhandene
+      // allgemeine dripIn-Effekt unten) - macht sichtbar, dass GENAU diese
+      // Formation gerade traeuft. Distanzbasierter Timer (dripT, wie ueberall
+      // sonst in dieser Datei), damit die Tropfrate nicht vom Tempo abhaengt.
+      o.dripT -= move;
+      if (o.dripT <= 0) {
+        o.dripT = 260 + Math.random() * 340;
+        spawnParticle(o.x + o.w / 2, o.y + o.h, 0, 25,
+                      0.9 + Math.random() * 0.4, 1.6 + Math.random() * 1.2, "drip");
+      }
+    }
     if (o.kind === "spider") {
       // Position jeden Frame neu aus der aktuellen Deckenwelle + dem
       // distanzbasierten Absprungfortschritt ableiten (siehe spawnSpider()) -
