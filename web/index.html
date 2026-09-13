@@ -259,6 +259,7 @@
     <div class="scores">
       <div><span>Bestwert</span><b id="mHigh">00000</b></div>
       <div><span>Zuletzt</span><b id="mLast">00000</b></div>
+      <div><span>Muenzen</span><b id="mCoins">00000</b></div>
     </div>
     <div class="levels" id="levelSelect">
       <button class="level" id="lvlDesert" aria-pressed="true" aria-label="Level 1: Wueste">
@@ -515,6 +516,18 @@ function unlockCave() {
   if (caveUnlocked) { return; }
   caveUnlocked = true;
   try { localStorage.setItem(CAVE_UNLOCK_KEY, "1"); } catch (e) {}
+}
+
+// Dauerhafter Muenzstand: eigene Waehrung, getrennt vom Score-Bonus (+25 pro
+// Muenze auf state.bonus, wirkt nur auf den Lauf-Score) - ueberlebt einzelne
+// Laeufe und beide Level, als Grundlage fuer ein spaeteres Shop-System.
+// Sofort bei jeder Aufnahme gespeichert (nicht erst am Laufende), damit
+// nichts verloren geht, falls die App zwischendurch geschlossen wird.
+var COINS_KEY = "hopper.coins";
+var totalCoins = readNum(COINS_KEY);
+function addCoins(n) {
+  totalCoins += n;
+  writeNum(COINS_KEY, totalCoins);
 }
 
 var settings = { music: true, sfx: true, shake: true, cycle: true, startCave: false };
@@ -1429,38 +1442,40 @@ function update(dt) {
   // aber bei Treffer gibt es Bonuspunkte statt die() statt zu sterben.
   // Interne Variablennamen (crystalIn etc.) blieben bewusst unveraendert -
   // reiner Optik-Umbau (drawCoin statt drawCrystal), keine Logikaenderung.
-  if (state.caveOn) {
-    for (i = collectibles.length - 1; i >= 0; i--) {
-      var cr = collectibles[i];
-      cr.x -= dx;
-      if (cr.x + cr.w < -20) { collectibles.splice(i, 1); continue; }
-      if (hits(cr)) {
-        collectibles.splice(i, 1);
-        state.bonus += 25;
-        state.flash = 0.6;
-        SFX.equip();
-      }
+  // Seit 1.49 in BEIDEN Leveln aktiv (vorher nur Hoehle) - derselbe
+  // caveOn-unabhaengige Timer, dieselbe Balance, jetzt einfach auch in der
+  // Wueste sichtbar.
+  for (i = collectibles.length - 1; i >= 0; i--) {
+    var cr = collectibles[i];
+    cr.x -= dx;
+    if (cr.x + cr.w < -20) { collectibles.splice(i, 1); continue; }
+    if (hits(cr)) {
+      collectibles.splice(i, 1);
+      state.bonus += 25;
+      addCoins(1);
+      state.flash = 0.6;
+      SFX.equip();
     }
-    state.crystalIn -= dx;
-    if (state.crystalIn <= 0) {
-      // 420-800 spawnte in einem 8-Minuten-Soak 539 Kristalle (ein Kristall
-      // ca. alle 0.9s) - fuehlte sich eher wie ein Dauerzustand an als wie
-      // ein besonderer Fund. 900-1600 war mit 632 in 20 Minuten (~alle 1.9s)
-      // immer noch zu dicht - der Weltabstand ist fix, aber state.speed
-      // waechst uebers Spiel, dieselbe Distanz kommt also in echter Zeit
-      // immer schneller wieder (siehe nextMountainGap() fuer dasselbe
-      // Problem bei den Bergabschnitten). 1800-3000 spawnte 335 in 20
-      // Minuten (~alle 3,6s) - fuehlt sich nach einem echten Fund an, nicht
-      // nach einem Dauerzustand.
-      state.crystalIn = 1800 + Math.random() * 1200;
-      // Immer auf dem Boden, nie in Sprunghoehe - ein Bonus darf nie eine
-      // Verzicht-oder-Risiko-Entscheidung erzwingen, einfach durchlaufen
-      // reicht. variant waehlt eine von drei Muenz-Metallfarben (siehe
-      // COIN_COLORS bei drawCoin), fuer sichtbare Abwechslung wie bei
-      // drawRock().
-      collectibles.push({ x: LW + 20, y: groundY - 24, w: 20, h: 24,
-                           variant: Math.floor(Math.random() * 3) });
-    }
+  }
+  state.crystalIn -= dx;
+  if (state.crystalIn <= 0) {
+    // 420-800 spawnte in einem 8-Minuten-Soak 539 Kristalle (ein Kristall
+    // ca. alle 0.9s) - fuehlte sich eher wie ein Dauerzustand an als wie
+    // ein besonderer Fund. 900-1600 war mit 632 in 20 Minuten (~alle 1.9s)
+    // immer noch zu dicht - der Weltabstand ist fix, aber state.speed
+    // waechst uebers Spiel, dieselbe Distanz kommt also in echter Zeit
+    // immer schneller wieder (siehe nextMountainGap() fuer dasselbe
+    // Problem bei den Bergabschnitten). 1800-3000 spawnte 335 in 20
+    // Minuten (~alle 3,6s) - fuehlt sich nach einem echten Fund an, nicht
+    // nach einem Dauerzustand.
+    state.crystalIn = 1800 + Math.random() * 1200;
+    // Immer auf dem Boden, nie in Sprunghoehe - ein Bonus darf nie eine
+    // Verzicht-oder-Risiko-Entscheidung erzwingen, einfach durchlaufen
+    // reicht. variant waehlt eine von drei Muenz-Metallfarben (siehe
+    // COIN_COLORS bei drawCoin), fuer sichtbare Abwechslung wie bei
+    // drawRock().
+    collectibles.push({ x: LW + 20, y: groundY - 24, w: 20, h: 24,
+                         variant: Math.floor(Math.random() * 3) });
   }
 
   // Die Decke selbst ist seit 1.17 reine Optik, keine Kollision mehr (siehe
@@ -2496,11 +2511,25 @@ function pad5(n) {
   return s;
 }
 
+// Kleines statisches Muenz-Icon fuer die HUD/Menue-Anzeige - dieselbe
+// Goldvariante wie COIN_COLORS[0], aber ohne Spin/Puls (drawCoin() ist fuer
+// die groesseren Sammelobjekte in der Welt gedacht, hier reicht ein
+// ruhiges kleines Symbol neben der Zahl).
+function drawCoinIcon(cx, cy, r) {
+  var c = COIN_COLORS[0];
+  var grad = ctx.createLinearGradient(cx - r, 0, cx + r, 0);
+  grad.addColorStop(0, c.edge); grad.addColorStop(0.5, c.base); grad.addColorStop(1, c.edge);
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle = c.edge; ctx.lineWidth = 1; ctx.stroke();
+}
+
 function drawHud() {
   if (state.attract) { return; }
   ctx.font = "600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-  ctx.textAlign = "right"; ctx.textBaseline = "top";
+  ctx.textBaseline = "top";
   var right = LW - 18;
+  ctx.textAlign = "right";
   if (state.high > 0) {
     ctx.fillStyle = theme.soft;
     ctx.fillText("HI " + fmtScore(state.high, state.caveOn), right - 78, 18);
@@ -2510,6 +2539,13 @@ function drawHud() {
     ctx.fillStyle = (state.flash > 0) ? theme.accent : theme.ink;
     ctx.fillText(fmtScore(state.score, state.caveOn), right, 18);
   }
+  // Dauerhafter Muenzstand oben links - eigene Waehrung, unabhaengig vom
+  // Score/HI auf der rechten Seite (siehe addCoins/totalCoins), Grundlage
+  // fuer ein spaeteres Shop-System.
+  drawCoinIcon(24, 17, 7);
+  ctx.textAlign = "left";
+  ctx.fillStyle = theme.ink;
+  ctx.fillText(String(totalCoins), 35, 18);
 }
 
 function render() {
@@ -2662,6 +2698,7 @@ function refreshMenu() {
   var mLast = readNum(caveMode ? CAVE_LAST_KEY : LAST_KEY);
   document.getElementById("mHigh").textContent = fmtScore(mHigh, caveMode);
   document.getElementById("mLast").textContent = fmtScore(mLast, caveMode);
+  document.getElementById("mCoins").textContent = pad5(totalCoins);
   elLvlDesert.setAttribute("aria-pressed", caveMode ? "false" : "true");
   elLvlCave.setAttribute("aria-pressed", caveMode ? "true" : "false");
   elLvlCave.classList.toggle("locked", !caveUnlocked);
