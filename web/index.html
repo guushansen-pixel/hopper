@@ -1526,7 +1526,11 @@ function update(dt) {
     if (hits(cr)) {
       collectibles.splice(i, 1);
       state.bonus += 25;
-      addCoins(1);
+      // Nur im echten Spiel zaehlen, nicht im Vorfuehrmodus (state.attract,
+      // die Bot-Demo im Hauptmenue-Hintergrund) - sonst waechst die
+      // dauerhafte Waehrung auch ohne Zutun des Spielers, nur weil das Menue
+      // offen war.
+      if (!state.attract) { addCoins(1); }
       state.flash = 0.6;
       SFX.equip();
     }
