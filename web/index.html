@@ -971,9 +971,13 @@ function newGame(attract) {
     pebbles.push({ x: Math.random() * LW, y: groundY + 5 + Math.random() * 18, w: 1 + Math.random() * 3.5 });
   }
   scrollFar = 0; scrollNear = 0; scrollPeaks = 0; scrollCeiling = 0;
-  night = 0; nightDir = 0; nextNightAt = 700;
+  // In der Hoehle ist es immer Nacht - kein Tag/Nacht-Zyklus dort (siehe
+  // die caveOn-Sperre unten im Zyklus-Trigger). Sofort auf night=1 setzen
+  // statt erst hinueberzublenden, damit ein frisch gestarteter Hoehlenlauf
+  // nicht kurz in Tagesfarben aufblitzt.
+  night = startInCave ? 1 : 0; nightDir = 0; nextNightAt = 700;
   nextMountainAt = 700 + Math.random() * 200;
-  applyTheme(0);
+  applyTheme(night);
 }
 
 // ========================================================= Partikel ========
@@ -1291,6 +1295,9 @@ function update(dt) {
     if (!state.caveOn && !state.entering && state.score >= CAVE_START) {
       if (state.attract) {
         state.caveOn = true;   // Vorfuehrmodus: weiterhin sofortiger, unauffaelliger Uebergang
+        // Sofort auf Nacht springen (siehe newGame()) - die Wueste kann hier
+        // in jedem beliebigen Tag/Nacht-Zustand stehen, die Hoehle aber nicht.
+        night = 1; nightDir = 0; applyTheme(1);
       } else {
         state.entering = true;
         state.enterT = 0;
@@ -1308,7 +1315,10 @@ function update(dt) {
       }
     }
 
-    if (settings.cycle && state.score >= nextNightAt) {
+    // In der Hoehle ist es immer Nacht - kein Zyklus dort (siehe newGame()),
+    // deshalb hier zusaetzlich gesperrt, falls state.caveOn zwischendurch
+    // (Vorfuehrmodus-Uebergang, siehe completeLevel()) wahr wird.
+    if (!state.caveOn && settings.cycle && state.score >= nextNightAt) {
       nextNightAt += 700;
       nightDir = (night > 0.5) ? -1 : 1;
     }
@@ -1621,6 +1631,9 @@ function completeLevel() {
     // einfach nahtlos in die Hoehlenkulisse ueber (wie Level 2, aber ohne
     // echten Punktestand-Effekt, das ist hier nur Dekoration).
     state.caveOn = true;
+    // Sofort auf Nacht springen (siehe newGame()) - die Wueste kann hier in
+    // jedem beliebigen Tag/Nacht-Zustand stehen, die Hoehle aber nicht.
+    night = 1; nightDir = 0; applyTheme(1);
     return;
   }
   state.phase = "cleared"; state.deadT = 0;
@@ -3099,7 +3112,11 @@ SWITCHES.forEach(function (s) {
     saveJson(SET_KEY, settings);
     syncSwitches();
     if (s.key === "music") { if (settings.music) { musicStart(); } else { musicStop(); } }
-    if (s.key === "cycle" && !settings.cycle) { night = 0; nightDir = 0; applyTheme(0); }
+    // Beim Ausschalten sofort auf den fuer den aktuellen Ort richtigen
+    // Zustand springen: Hoehle bleibt Nacht, Wueste geht auf Tag zurueck.
+    if (s.key === "cycle" && !settings.cycle) {
+      night = state.caveOn ? 1 : 0; nightDir = 0; applyTheme(night);
+    }
     SFX.ui();
   });
 });
