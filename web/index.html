@@ -399,236 +399,6 @@ function resize() {
 window.addEventListener("resize", resize);
 window.addEventListener("orientationchange", function () { setTimeout(resize, 120); });
 
-// ============================================================ WebGL-Effekte =
-// Auf Nutzerwunsch echte WebGL-Fragment-Shader fuer einzelne Detail-Effekte
-// (Pfuetzen, Kristall-Glimmer, Lavaschein), statt der bisherigen reinen
-// 2D-Canvas-Annaeherungen - bewusst NUR fuer diese Details, nicht das ganze
-// Spiel: ein kompletter WebGL-Umbau aller Zeichenfunktionen (Wueste, Laeufer,
-// UI, jedes Hindernis) waere vom Umfang/Risiko her vergleichbar mit dem
-// Godot-Umstieg, den der User zurueckgerollt hat ("sieht aus wie aus der
-// Steinzeit", waehrend des Neuaufbaus). Ein kleiner, interner WebGL-Kontext
-// NUR fuer diese Details liefert echte Shader, ohne den Rest des bereits
-// funktionierenden 2D-Renderings anzufassen.
-//
-// Architektur (seit den Pfuetzen-Fixes in V26): KEIN zweiter sichtbarer
-// <canvas>-Layer (zwei separate Compositor-Ebenen konnten beim Scrollen
-// asynchron aktualisiert werden - sichtbares Blinken/Wackeln, siehe README).
-// glCanvas ist ein rein internes, nie ins DOM eingehaengtes Offscreen-Canvas.
-// Pro Effekt-Aufruf wird der jeweilige Shader dort in genau der benoetigten
-// Pixelgroesse gerendert und das Ergebnis per ctx.drawImage() DIREKT in den
-// Haupt-2D-Kontext #c gezeichnet, an exakt der Stelle, an der vorher die
-// reine 2D-Zeichnung stand - dadurch bleibt es immer nur EIN Compositor-
-// Layer, und drawImage erbt automatisch dieselbe ctx-Transformation
-// (inkl. Ruettel-Versatz) wie jede andere Zeichnung.
-//
-// Mehrere Effekte teilen sich denselben WebGL-Kontext/dasselbe Offscreen-
-// Canvas, aber jeder hat sein eigenes kompiliertes Programm (GL_PROGRAMS) -
-// glBlit() ist der gemeinsame "Programm X in Groesse Y rendern"-Helfer.
-var glCanvas = document.createElement("canvas");
-var gl = null, glOk = false;
-var GL_PROGRAMS = {};
-var glQuadBuffer = null;
-function compileShader(src, type) {
-  var s = gl.createShader(type);
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { return null; }
-  return s;
-}
-// Alle Effekt-Shader nutzen denselben Vertex-Shader: ein volles Ziel-Canvas
-// (-1..1) - jeder Effekt bekommt sein eigenes, exakt passend zugeschnittenes
-// Offscreen-Canvas (siehe glBlit()), es muss also innerhalb des Shaders
-// nirgends positioniert werden.
-var GL_VS = "attribute vec2 a_uv;\n" +
-  "varying vec2 v_uv;\n" +
-  "void main() {\n" +
-  "  v_uv = a_uv;\n" +
-  "  gl_Position = vec4(a_uv * 2.0 - 1.0, 0.0, 1.0);\n" +
-  "}";
-// Pfuetzen: prozedurales Wellenfeld -> daraus abgeleitete Normale -> echte
-// Blinn-Phong-Glanzlicht- und Fresnel-Rechnung pro Pixel (kein Raytracing im
-// technischen Sinn - das braeuchte Strahl/Objekt-Schnittpunkte -, aber echte
-// dynamische Lichtberechnung statt einer statischen Textur/eines linearen
-// Farbverlaufs wie in der urspruenglichen 2D-Fassung).
-var PUDDLE_FS = "precision mediump float;\n" +
-  "varying vec2 v_uv;\n" +
-  "uniform float u_time;\n" +
-  "uniform float u_seed;\n" +
-  "uniform float u_scroll;\n" +
-  "void main() {\n" +
-  "  vec2 uv = v_uv - 0.5;\n" +
-  "  float ellipse = (uv.x*uv.x)/(0.25) + (uv.y*uv.y)/(0.0484);\n" +
-  "  if (ellipse > 1.0) { discard; }\n" +
-  "  float t = u_time * 1.6 + u_seed;\n" +
-  "  vec2 grad = vec2(\n" +
-  "    cos(uv.x*10.0 + t*1.3 + u_scroll) * 5.0,\n" +
-  "    cos(uv.y*14.0 - t*0.9 + uv.x*6.0 + u_scroll*0.6) * 4.2\n" +
-  "  );\n" +
-  "  vec3 normal = normalize(vec3(-grad*0.05, 1.0));\n" +
-  "  vec3 lightDir = normalize(vec3(-0.35, 0.55, 0.75));\n" +
-  "  vec3 viewDir = vec3(0.0, 0.0, 1.0);\n" +
-  "  vec3 halfDir = normalize(lightDir + viewDir);\n" +
-  "  float spec = pow(max(dot(normal, halfDir), 0.0), 40.0);\n" +
-  "  float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 2.5);\n" +
-  "  vec3 deepColor = vec3(0.04, 0.09, 0.13);\n" +
-  "  vec3 shallowColor = vec3(0.22, 0.42, 0.48);\n" +
-  "  vec3 water = mix(deepColor, shallowColor, fresnel * 0.6 + 0.15);\n" +
-  "  water += vec3(1.0, 0.98, 0.9) * spec * 0.9;\n" +
-  "  water += vec3(0.5, 0.65, 0.7) * fresnel * 0.25;\n" +
-  "  float edgeFade = 1.0 - smoothstep(0.72, 1.0, ellipse);\n" +
-  "  float alpha = edgeFade;\n" +
-  "  gl_FragColor = vec4(water * alpha, alpha);\n" +
-  "}";
-// Kristall-Glimmer: pulsierender radialer Schein plus winkelabhaengiges
-// Funkeln (zwei ueberlagerte Sinuswellen in Polarwinkel+Zeit) - simuliert
-// Licht, das ueber mehrere Facetten wandert, echte pro-Pixel-Berechnung
-// statt eines statischen 2-Stopp-Radialverlaufs. u_color faerbt den Schein
-// (Sammelobjekt vs. Hoehlen-Gefahrvariante nutzen unterschiedliche Toene).
-var CRYSTAL_FS = "precision mediump float;\n" +
-  "varying vec2 v_uv;\n" +
-  "uniform float u_time;\n" +
-  "uniform float u_seed;\n" +
-  "uniform vec3 u_color;\n" +
-  "void main() {\n" +
-  "  vec2 uv = (v_uv - 0.5) * 2.0;\n" +
-  "  float d = length(uv);\n" +
-  "  if (d > 1.0) { discard; }\n" +
-  "  float t = u_time * 2.0 + u_seed;\n" +
-  "  float ang = atan(uv.y, uv.x);\n" +
-  "  float pulse = 0.75 + 0.25 * sin(t * 1.8);\n" +
-  "  float sparkle = sin(ang * 7.0 + t * 3.0) * 0.15\n" +
-  "                + sin(ang * 13.0 - t * 2.2 + d * 8.0) * 0.10;\n" +
-  "  float glow = pow(1.0 - d, 2.2) * pulse + sparkle * (1.0 - d);\n" +
-  "  glow = max(0.0, glow);\n" +
-  "  float alpha = glow * 0.85;\n" +
-  "  gl_FragColor = vec4(u_color * glow * alpha, alpha);\n" +
-  "}";
-// Lavaschein: geschichtetes Fliess-Wellenfeld (drei versetzte Sinus-Wellen
-// statt einer einzelnen) faerbt zwischen einem kuehlen dunklen Grundton und
-// glutheissem Orange - simuliert stroemende, ungleichmaessig heisse Lava
-// statt eines gleichfoermig pulsierenden Farbverlaufs.
-var LAVA_FS = "precision mediump float;\n" +
-  "varying vec2 v_uv;\n" +
-  "uniform float u_time;\n" +
-  "void main() {\n" +
-  "  vec2 uv = v_uv;\n" +
-  "  float t = u_time * 0.5;\n" +
-  "  float n = sin(uv.x * 8.0 + t * 1.3) * 0.5\n" +
-  "          + sin(uv.x * 17.0 - t * 2.1 + uv.y * 4.0) * 0.28\n" +
-  "          + sin(uv.x * 29.0 + t * 3.4 - uv.y * 9.0) * 0.14;\n" +
-  "  n = n * 0.5 + 0.5;\n" +
-  "  float heat = smoothstep(0.35, 0.95, n) * (1.0 - uv.y * 0.3);\n" +
-  "  vec3 cool = vec3(0.10, 0.02, 0.01);\n" +
-  "  vec3 hot = vec3(1.0, 0.55, 0.08);\n" +
-  "  vec3 col = mix(cool, hot, heat);\n" +
-  "  float vertFade = pow(1.0 - uv.y, 1.6);\n" +
-  "  float alpha = (0.10 + heat * 0.55) * vertFade;\n" +
-  "  gl_FragColor = vec4(col * alpha, alpha);\n" +
-  "}";
-function compileProgram(fsSrc, uniformNames) {
-  var vs = compileShader(GL_VS, gl.VERTEX_SHADER);
-  var fs = compileShader(fsSrc, gl.FRAGMENT_SHADER);
-  if (!vs || !fs) { return null; }
-  var program = gl.createProgram();
-  gl.attachShader(program, vs);
-  gl.attachShader(program, fs);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { return null; }
-  var uniforms = {};
-  for (var i = 0; i < uniformNames.length; i++) {
-    uniforms[uniformNames[i]] = gl.getUniformLocation(program, "u_" + uniformNames[i]);
-  }
-  return { program: program, attrLoc: gl.getAttribLocation(program, "a_uv"), uniforms: uniforms };
-}
-(function initGL() {
-  try {
-    var glAttrs = { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true };
-    gl = glCanvas.getContext("webgl", glAttrs) ||
-         glCanvas.getContext("experimental-webgl", glAttrs);
-    if (!gl) { return; }
-    var quad = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
-    glQuadBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, glQuadBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-    GL_PROGRAMS.puddle = compileProgram(PUDDLE_FS, ["time", "seed", "scroll"]);
-    GL_PROGRAMS.crystal = compileProgram(CRYSTAL_FS, ["time", "seed", "color"]);
-    GL_PROGRAMS.lava = compileProgram(LAVA_FS, ["time"]);
-    if (!GL_PROGRAMS.puddle || !GL_PROGRAMS.crystal || !GL_PROGRAMS.lava) { return; }
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    glOk = true;
-  } catch (e) { glOk = false; }
-})();
-// Gemeinsamer Render-Helfer: rendert das gegebene Programm in ein Offscreen-
-// Canvas der angegebenen Pixelgroesse. setUniformsFn setzt die Effekt-
-// eigenen Uniforms; der Aufrufer blittet das Ergebnis danach selbst per
-// ctx.drawImage() (jeder Effekt hat eine andere Ziel-Geometrie/Transform-
-// Situation, siehe drawPuddleGL()/drawCrystalGlowGL()/drawCaveGlowGL()).
-function glBlit(entry, pxW, pxH, setUniformsFn) {
-  pxW = Math.max(1, pxW); pxH = Math.max(1, pxH);
-  glCanvas.width = pxW; glCanvas.height = pxH;
-  gl.viewport(0, 0, pxW, pxH);
-  gl.useProgram(entry.program);
-  gl.bindBuffer(gl.ARRAY_BUFFER, glQuadBuffer);
-  gl.enableVertexAttribArray(entry.attrLoc);
-  gl.vertexAttribPointer(entry.attrLoc, 2, gl.FLOAT, false, 0, 0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
-  setUniformsFn(entry.uniforms);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-}
-// Hex-Farbe ("#rrggbb") in normierte 0..1-RGB-Floats fuer Shader-Uniforms.
-function hexToRgb01(hex) {
-  var n = parseInt(hex.slice(1), 16);
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
-}
-// Rendert EINE Pfuetze in ein exakt passend großes Offscreen-WebGL-Canvas
-// und blittet das Ergebnis direkt in den Haupt-2D-Kontext - dieselbe
-// ctx-Transformation (inkl. Ruettel-Versatz) wie jede andere 2D-Zeichnung,
-// da es derselbe Aufruf innerhalb desselben render()-Durchlaufs ist.
-function drawPuddleGL(o) {
-  var b = puddleBounds(o);
-  var pxW = Math.round((b.right - b.left) * unit * dpr);
-  var pxH = Math.round((b.bottom - b.top) * unit * dpr);
-  // Nutzerfeedback: "vom Scrolling ist es komisch" - das Wellenmuster hing
-  // bisher nur an state.time, war also beim Scrollen optisch vom Boden
-  // "abgeloest" (wanderte nicht mit, anders als jede andere Bodentextur in
-  // der Hoehle). u_scroll haengt an o.x (bewegt sich exakt im Weltscroll-
-  // Tempo, wie scrollCeiling ueberall sonst) und wird zur Wellen-Phase
-  // addiert, damit das Muster sichtbar mit dem Boden mitwandert statt
-  // unabhaengig ueber der Pfuetze zu schweben. Koeffizient bewusst klein
-  // (0.004) - zu hoch (erster Versuch: 0.035) liess das Muster mehrfach
-  // durchrotieren statt nur leicht mitzuwandern.
-  glBlit(GL_PROGRAMS.puddle, pxW, pxH, function (u) {
-    gl.uniform1f(u.time, state.time);
-    gl.uniform1f(u.seed, (o.x % 97) * 1.7);
-    gl.uniform1f(u.scroll, o.x * 0.004);
-  });
-  ctx.drawImage(glCanvas, b.left, b.top, b.right - b.left, b.bottom - b.top);
-}
-// Kristall-Glimmer (Sammelobjekt drawCrystal() + Hoehlen-Gefahrvariante in
-// drawCactus()) - ersetzt drawCrystalGlow()s bisherigen 2D-Radialverlauf.
-function drawCrystalGlowGL(cx, cy, r, colorHex) {
-  var rgb = hexToRgb01(colorHex);
-  var pxSize = Math.round(r * 2 * unit * dpr);
-  glBlit(GL_PROGRAMS.crystal, pxSize, pxSize, function (u) {
-    gl.uniform1f(u.time, state.time);
-    gl.uniform1f(u.seed, (cx * 3.1 + cy * 1.7) % 97);
-    gl.uniform3f(u.color, rgb[0], rgb[1], rgb[2]);
-  });
-  ctx.drawImage(glCanvas, cx - r, cy - r, r * 2, r * 2);
-}
-// Lavaschein am unteren Hoehlenrand - ersetzt drawCaveGlow()s bisherigen
-// pulsierenden linearen Verlauf. Feste, niedrige Render-Aufloesung (dieser
-// Effekt laeuft JEDEN Frame durchgehend, nicht nur bei vereinzelten
-// Hindernissen wie Pfuetze/Kristall) - ein weicher Gluteffekt braucht keine
-// Bildschirmaufloesung, drawImage skaliert beim Blit einfach hoch.
-function drawCaveGlowGL() {
-  glBlit(GL_PROGRAMS.lava, 256, 32, function (u) {
-    gl.uniform1f(u.time, state.time);
-  });
-  ctx.drawImage(glCanvas, 0, groundY - 70, LW, 70);
-}
-
 // ============================================================== Farben =====
 var DAY = {
   skyTop: "#dfe7f1", skyBot: "#f4f6f9",
@@ -1856,18 +1626,14 @@ function drawClouds() {
 // statisch, damit die sonst reine Grau/Schwarz-Palette der Hoehle einen
 // warmen Kontrastpunkt bekommt. Reine Deko, kein Weltbezug/Scroll noetig,
 // liegt ohnehin unterhalb der sichtbaren Deckenkante.
-function drawCaveGlow2DFallback() {
+function drawCaveGlow() {
+  if (!state.caveOn) { return; }
   var pulse = 0.5 + 0.5 * Math.sin(state.time * 0.6);
   var g = ctx.createLinearGradient(0, groundY - 70, 0, groundY);
   g.addColorStop(0, "rgba(220,110,40,0)");
   g.addColorStop(1, "rgba(220,110,40," + (0.09 + 0.06 * pulse).toFixed(3) + ")");
   ctx.fillStyle = g;
   ctx.fillRect(0, groundY - 70, LW, 70);
-}
-function drawCaveGlow() {
-  if (!state.caveOn) { return; }
-  if (!glOk) { drawCaveGlow2DFallback(); return; }
-  drawCaveGlowGL();
 }
 function drawGround() {
   // Wie die Decke (CAVE_SKY_TOP/BOT) haengt der Hoehlenboden nicht am
@@ -2396,32 +2162,43 @@ function drawIcicleTexture(x, y, w, h, seed) {
 }
 // Reflektierende Pfuetze am Boden unter einem Tropfstein - dort, wo die
 // Tropfen von der Spitze (siehe dripT in update()) tatsaechlich ankommen.
-// Gemeinsame Ellipse (Mitte + Radien in Logik-Koordinaten), von drawPuddle()/
-// drawPuddleGL() (echter WebGL-Shader, siehe WebGL-Pfuetzen-Abschnitt weiter
-// oben) und dem 2D-Fallback benutzt, damit beide exakt dieselbe Flaeche
-// treffen.
-function puddleBounds(o) {
+// Canvas 2D hat kein echtes Raytracing/Shader-Pipeline (das braeuchte einen
+// WebGL-Kontext, ein kompletter Umbau der Rendering-Basis dieses Spiels) -
+// derselbe "nass/spiegelnd"-Eindruck laesst sich aber mit reinen 2D-Mitteln
+// erzeugen: ein dunkler Farbverlauf als Wasserflaeche, ein weicher heller
+// Schein von oben (Andeutung einer Spiegelung der Deckenbeleuchtung/des
+// Tropfsteins selbst statt einer exakten gespiegelten Kopie - echte
+// Wasserreflexionen sind ohnehin nie scharf) und ein einzelner wandernder
+// Glanzstreifen, der ueber die Zeit langsam ueber die Flaeche laeuft und
+// damit den einzigen wirklich "shaderhaften" Teil des Effekts liefert
+// (Licht, das sich bewegt, nicht nur eine statische Textur).
+function drawPuddle(o) {
+  G = ctx;
   var cx = o.x + o.w / 2, py = groundY - 1;
   var pw = Math.max(50, o.w * 2.2), ph = pw * 0.2;
-  return { left: cx - pw / 2, right: cx + pw / 2, top: py - ph / 2, bottom: py + ph / 2 };
-}
-// Fallback ohne WebGL (alte Geraete/Browser ohne Kontext) - dieselbe rein
-// 2D-Annaeherung wie zuvor (V24), damit dort trotzdem eine Pfuetze zu sehen
-// ist statt eines falsch eingefaerbten Lochs (siehe drawPuddle() unten).
-function drawPuddle2DFallback(o) {
-  var b = puddleBounds(o);
-  var cx = (b.left + b.right) / 2, py = (b.top + b.bottom) / 2;
-  var pw = b.right - b.left, ph = b.bottom - b.top;
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(cx, py, pw / 2, ph / 2, 0, 0, 6.2832);
   ctx.clip();
+
   var base = ctx.createRadialGradient(cx, py - ph * 0.1, 0, cx, py, pw / 2);
   base.addColorStop(0, "rgba(70,95,110,0.75)");
   base.addColorStop(0.6, "rgba(25,38,48,0.65)");
   base.addColorStop(1, "rgba(8,12,18,0.5)");
   ctx.fillStyle = base;
   ctx.fillRect(cx - pw, py - ph * 2, pw * 2, ph * 3);
+
+  var reflH = Math.min(ph * 0.9, 14);
+  var refl = ctx.createLinearGradient(cx, py - reflH, cx, py);
+  refl.addColorStop(0, "rgba(200,215,225,0.30)");
+  refl.addColorStop(1, "rgba(200,215,225,0)");
+  ctx.fillStyle = refl;
+  ctx.beginPath();
+  ctx.moveTo(cx - o.w * 0.35, py);
+  ctx.lineTo(cx, py - reflH);
+  ctx.lineTo(cx + o.w * 0.35, py);
+  ctx.closePath(); ctx.fill();
+
   var sweep = ((state.time * 36 + o.x * 1.7) % (pw * 2.4)) - pw * 1.2;
   var sheen = ctx.createLinearGradient(cx + sweep - 10, 0, cx + sweep + 10, 0);
   sheen.addColorStop(0, "rgba(255,255,255,0)");
@@ -2430,14 +2207,9 @@ function drawPuddle2DFallback(o) {
   ctx.fillStyle = sheen;
   ctx.fillRect(cx - pw, py - ph, pw * 2, ph * 2);
   ctx.restore();
-}
-// Normalfall (WebGL verfuegbar): nur ein transparentes Loch stanzen, durch
-// das der echte Shader-Layer (#glBg, dahinter) sichtbar wird - siehe
-// Kommentar am Anfang des WebGL-Pfuetzen-Abschnitts weiter oben.
-function drawPuddle(o) {
-  G = ctx;
-  if (!glOk) { drawPuddle2DFallback(o); return; }
-  drawPuddleGL(o);
+
+  ctx.strokeStyle = "rgba(190,225,235,0.28)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(cx, py, pw / 2, ph / 2, 0, 0, 6.2832); ctx.stroke();
 }
 function drawStalactite(o) {
   G = ctx;
@@ -2511,16 +2283,12 @@ var CRYSTAL_VARIANTS = [
 // die Boden-Hindernisse (drawCactus) ihn bekommen koennen. Hex+Alpha
 // (8-stelliges Hex) statt rgba(), damit dieselbe Farbvariable fuer Fuellung
 // UND Glimmer reicht.
-function drawCrystalGlow2DFallback(cx, cy, r, color) {
+function drawCrystalGlow(cx, cy, r, color) {
   var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   g.addColorStop(0, color + "77");
   g.addColorStop(1, color + "00");
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832); ctx.fill();
-}
-function drawCrystalGlow(cx, cy, r, color) {
-  if (!glOk) { drawCrystalGlow2DFallback(cx, cy, r, color); return; }
-  drawCrystalGlowGL(cx, cy, r, color);
 }
 // Farbverlauf statt Flaechenfarbe (heller zur Spitze, so als faengt dort
 // Licht) plus Facette und eine duenne Glanzkante - liest sich glasiger als
