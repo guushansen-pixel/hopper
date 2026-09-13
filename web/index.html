@@ -2336,8 +2336,6 @@ function drawPuddle2DFallback(o) {
   ctx.fillStyle = sheen;
   ctx.fillRect(cx - pw, py - ph, pw * 2, ph * 2);
   ctx.restore();
-  ctx.strokeStyle = "rgba(190,225,235,0.28)"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.ellipse(cx, py, pw / 2, ph / 2, 0, 0, 6.2832); ctx.stroke();
 }
 // Normalfall (WebGL verfuegbar): nur ein transparentes Loch stanzen, durch
 // das der echte Shader-Layer (#glBg, dahinter) sichtbar wird - siehe
@@ -2346,11 +2344,6 @@ function drawPuddle(o) {
   G = ctx;
   if (!glOk) { drawPuddle2DFallback(o); return; }
   drawPuddleGL(o);
-  var b = puddleBounds(o);
-  var cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2;
-  var rx = (b.right - b.left) / 2, ry = (b.bottom - b.top) / 2;
-  ctx.strokeStyle = "rgba(190,225,235,0.28)"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 6.2832); ctx.stroke();
 }
 function drawStalactite(o) {
   G = ctx;
