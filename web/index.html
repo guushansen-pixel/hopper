@@ -217,6 +217,19 @@
     border: 2px solid transparent; flex-direction: column; gap: 2px;
   }
   .hat[aria-pressed="true"] { border-color: var(--sel); }
+  .hat.locked, .sw.locked { opacity: .5; }
+  .hat .price { font-size: 10px; color: var(--soft); font-weight: 500; }
+  .hat .lock, .sw .lock {
+    position: absolute; top: 3px; right: 3px; width: 15px; height: 15px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: var(--glassBtn); color: var(--soft); margin: 0; padding: 0;
+    box-shadow: 0 1px 2px var(--shadow);
+  }
+  .hat .lock[hidden], .sw .lock[hidden] { display: none; }
+  .sw .swPrice {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.55);
+  }
 
   .hint { color: var(--soft); font-size: 12px; margin-top: 14px; line-height: 1.6; }
 
@@ -298,6 +311,14 @@
       </svg>
       Garderobe
     </button>
+    <button id="btnShop">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 8h16l-1.4 10.2a2 2 0 0 1-2 1.8H7.4a2 2 0 0 1-2-1.8L4 8Z"/>
+        <path d="M8 8V6a4 4 0 0 1 8 0v2"/>
+      </svg>
+      Shop
+    </button>
     <div class="hint">Tippen zum Springen, laenger halten springt hoeher.<br>Unteres Bilddrittel halten zum Ducken.</div>
   </div>
 </div>
@@ -316,6 +337,25 @@
     <div class="swatches" id="swatches"></div>
     <div class="grpLabel">Kopf</div>
     <div class="hats" id="hats"></div>
+  </div>
+</div>
+
+<!-- Shop -->
+<div class="overlay" id="shop" hidden>
+  <div class="panel">
+    <div class="head">
+      <button class="back" id="shopBack" aria-label="Zurueck">&larr;</button>
+      <h2>Shop</h2>
+    </div>
+    <div class="scores">
+      <div><span>Muenzen</span><b id="shopCoins">00000</b></div>
+    </div>
+    <div class="grpLabel">Charaktere</div>
+    <div class="hats" id="shopShapes" style="grid-template-columns:repeat(3,1fr)"></div>
+    <div class="grpLabel">Farben</div>
+    <div class="swatches" id="shopColors"></div>
+    <div class="grpLabel">Kopf</div>
+    <div class="hats" id="shopHats"></div>
   </div>
 </div>
 
@@ -529,36 +569,70 @@ function addCoins(n) {
   totalCoins += n;
   writeNum(COINS_KEY, totalCoins);
 }
+function spendCoins(n) {
+  if (totalCoins < n) { return false; }
+  totalCoins -= n;
+  writeNum(COINS_KEY, totalCoins);
+  return true;
+}
+
+// Dauerhafte Freischaltungen fuer den Shop: separat vom aktuell getragenen
+// look (siehe unten) - look sagt WAS getragen wird, unlocked sagt WAS
+// ueberhaupt getragen werden DARF. dog/auto/none sind von Anfang an frei
+// (das ist der Startzustand "nur der Standardhund"), alles andere muss im
+// Shop gegen Muenzen freigeschaltet werden. loadJson() ersetzt bei Erfolg
+// die kompletten Unterobjekte (gleiche typeof-Pruefung wie ueberall sonst),
+// darum reicht ein einziger Aufruf trotz verschachtelter Struktur.
+var UNLOCK_KEY = "hopper.unlocked";
+var unlocked = { shape: { dog: 1 }, color: { auto: 1 }, hat: { none: 1 } };
+loadJson(UNLOCK_KEY, unlocked);
+function isUnlocked(kind, id) { return !!(unlocked[kind] && unlocked[kind][id]); }
+function unlockItem(kind, id) {
+  if (!unlocked[kind]) { unlocked[kind] = {}; }
+  unlocked[kind][id] = 1;
+  saveJson(UNLOCK_KEY, unlocked);
+}
+// Kauft ein Item, falls noch nicht freigeschaltet und genug Muenzen da sind.
+// Gibt zurueck, ob das Item danach freigeschaltet ist (auch wenn es das
+// schon vorher war) - der Aufrufer muss also nur auf false pruefen, um
+// "zu wenig Muenzen" zu erkennen.
+function buyItem(kind, id, price) {
+  if (isUnlocked(kind, id)) { return true; }
+  if (!spendCoins(price)) { return false; }
+  unlockItem(kind, id);
+  return true;
+}
 
 var settings = { music: true, sfx: true, shake: true, cycle: true, startCave: false };
 var look = { color: "auto", hat: "none", shape: "dog" };
 
 // Drei Silhouetten statt nur einer - Ohren und Schwanz unterscheiden sich,
-// Rumpf/Beine/Laufzyklus bleiben geteilt (siehe drawEars/drawTail).
+// Rumpf/Beine/Laufzyklus bleiben geteilt (siehe drawEars/drawTail). price
+// 0 = von Anfang an frei (siehe unlocked oben), sonst Shop-Preis in Muenzen.
 var SHAPES = [
-  { id: "dog",   name: "Hund" },
-  { id: "cat",   name: "Katze" },
-  { id: "bunny", name: "Hase" }
+  { id: "dog",   name: "Hund",  price: 0 },
+  { id: "cat",   name: "Katze", price: 35 },
+  { id: "bunny", name: "Hase",  price: 55 }
 ];
 
 // Farben, die sowohl auf hellem als auch auf dunklem Grund lesbar bleiben -
 // deshalb durchweg mittlere Helligkeit, keine sehr hellen oder dunklen Toene.
 var COLORS = [
-  { id: "auto",    name: "Standard", hex: null },
-  { id: "terra",   name: "Terrakotta", hex: "#e4703a" },
-  { id: "teal",    name: "Petrol",     hex: "#2a9d8f" },
-  { id: "violet",  name: "Violett",    hex: "#7c6bd9" },
-  { id: "amber",   name: "Bernstein",  hex: "#dfa22b" },
-  { id: "rose",    name: "Rose",       hex: "#dc5a78" },
-  { id: "green",   name: "Gruen",      hex: "#4c9a5a" },
-  { id: "blue",    name: "Blau",       hex: "#4a90d9" }
+  { id: "auto",    name: "Standard",    hex: null,      price: 0 },
+  { id: "terra",   name: "Terrakotta",  hex: "#e4703a", price: 20 },
+  { id: "teal",    name: "Petrol",      hex: "#2a9d8f", price: 20 },
+  { id: "violet",  name: "Violett",     hex: "#7c6bd9", price: 20 },
+  { id: "amber",   name: "Bernstein",   hex: "#dfa22b", price: 20 },
+  { id: "rose",    name: "Rose",        hex: "#dc5a78", price: 20 },
+  { id: "green",   name: "Gruen",       hex: "#4c9a5a", price: 20 },
+  { id: "blue",    name: "Blau",        hex: "#4a90d9", price: 20 }
 ];
 var HATS = [
-  { id: "none",    name: "ohne" },
-  { id: "cap",     name: "Cap" },
-  { id: "top",     name: "Zylinder" },
-  { id: "band",    name: "Band" },
-  { id: "goggles", name: "Brille" }
+  { id: "none",    name: "ohne",     price: 0 },
+  { id: "cap",     name: "Cap",      price: 25 },
+  { id: "top",     name: "Zylinder", price: 25 },
+  { id: "band",    name: "Band",     price: 25 },
+  { id: "goggles", name: "Brille",   price: 25 }
 ];
 
 function loadJson(key, target) {
@@ -2762,6 +2836,7 @@ cv.addEventListener("mouseup", function () {
 // ============================================================ Screens ======
 var elMenu = document.getElementById("menu");
 var elWard = document.getElementById("wardrobe");
+var elShop = document.getElementById("shop");
 var elSet  = document.getElementById("settings");
 var elPaused = document.getElementById("paused");
 var elOver = document.getElementById("over");
@@ -2776,6 +2851,7 @@ function show(name) {
   screen = name;
   elMenu.hidden   = (name !== "menu");
   elWard.hidden   = (name !== "wardrobe");
+  elShop.hidden   = (name !== "shop");
   elSet.hidden    = (name !== "settings");
   elPaused.hidden = (name !== "paused");
   elOver.hidden   = (name !== "over");
@@ -2848,6 +2924,15 @@ function closeSettings() {
 }
 function openWardrobe() { audioInit(); syncLook(); show("wardrobe"); SFX.ui(); }
 
+// Padlock-Icon fuer gesperrte Garderobe-/Shop-Eintraege - dieselbe SVG wie
+// beim Hoehlen-Schloss (siehe #lvlCaveLock), hier aber wiederverwendbar per
+// String statt einmaliges HTML-Element, da es auf beliebig vielen Knoepfen
+// (Formen/Farben/Huete, je in Garderobe UND Shop) auftauchen kann.
+var LOCK_ICON_HTML = '<span class="lock" hidden><svg viewBox="0 0 24 24" width="11" height="11" ' +
+  'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" ' +
+  'stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.4"/>' +
+  '<path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/></svg></span>';
+
 // --- Garderobe aufbauen ---
 var elSwatches = document.getElementById("swatches");
 var elHats = document.getElementById("hats");
@@ -2859,8 +2944,9 @@ SHAPES.forEach(function (s) {
   b.className = "hat";
   b.setAttribute("aria-pressed", "false");
   b.dataset.id = s.id;
-  b.textContent = s.name;
+  b.innerHTML = s.name + LOCK_ICON_HTML;
   b.addEventListener("click", function () {
+    if (!isUnlocked("shape", s.id)) { return; }
     look.shape = s.id; saveJson(LOOK_KEY, look); syncLook(); SFX.equip();
   });
   elShapes.appendChild(b);
@@ -2879,7 +2965,9 @@ COLORS.forEach(function (c) {
     // "Standard" folgt dem Tag-Nacht-Thema, deshalb halb hell / halb dunkel
     b.style.background = "linear-gradient(135deg, #343a40 0 50%, #e6e9ee 50% 100%)";
   }
+  b.innerHTML = LOCK_ICON_HTML;
   b.addEventListener("click", function () {
+    if (!isUnlocked("color", c.id)) { return; }
     look.color = c.id; saveJson(LOOK_KEY, look); syncLook(); SFX.equip();
   });
   elSwatches.appendChild(b);
@@ -2890,27 +2978,104 @@ HATS.forEach(function (h) {
   b.className = "hat";
   b.setAttribute("aria-pressed", "false");
   b.dataset.id = h.id;
-  b.textContent = h.name;
+  b.innerHTML = h.name + LOCK_ICON_HTML;
   b.addEventListener("click", function () {
+    if (!isUnlocked("hat", h.id)) { return; }
     look.hat = h.id; saveJson(LOOK_KEY, look); syncLook(); SFX.equip();
   });
   elHats.appendChild(b);
 });
 
+// Sperr-Optik (gedimmt + Schloss-Badge) fuer einen Garderobe-Knopf setzen -
+// eigene kleine Funktion statt Duplizierung in den drei Schleifen unten in
+// syncLook(), da genau dieselben zwei Zeilen fuer Formen/Farben/Huete gelten.
+function syncLockVisual(el, kind) {
+  var on = isUnlocked(kind, el.dataset.id);
+  el.classList.toggle("locked", !on);
+  var lockEl = el.querySelector(".lock");
+  if (lockEl) { lockEl.hidden = on; }
+}
 function syncLook() {
   var i, els = elSwatches.children;
   for (i = 0; i < els.length; i++) {
     els[i].setAttribute("aria-pressed", els[i].dataset.id === look.color ? "true" : "false");
+    syncLockVisual(els[i], "color");
   }
   els = elHats.children;
   for (i = 0; i < els.length; i++) {
     els[i].setAttribute("aria-pressed", els[i].dataset.id === look.hat ? "true" : "false");
+    syncLockVisual(els[i], "hat");
   }
   els = elShapes.children;
   for (i = 0; i < els.length; i++) {
     els[i].setAttribute("aria-pressed", els[i].dataset.id === look.shape ? "true" : "false");
+    syncLockVisual(els[i], "shape");
   }
 }
+
+// --- Shop aufbauen ---
+// Baut die drei Gruppen einmalig auf (wie die Garderobe oben); refreshShop()
+// aktualisiert danach nur noch Preis-Anzeige/Sperr-Optik/Muenzstand, statt
+// bei jedem Kauf alles neu zu erzeugen.
+var elShopShapes = document.getElementById("shopShapes");
+var elShopColors = document.getElementById("shopColors");
+var elShopHats = document.getElementById("shopHats");
+var shopButtons = [];    // { el, item, kind, priceEl } - Formen + Huete (.hat-Knoepfe)
+var shopSwatches = [];   // { el, item, priceEl } - Farben (.sw-Knoepfe)
+
+function addShopItem(container, item, kind) {
+  var b = document.createElement("button");
+  b.className = "hat";
+  var nameEl = document.createElement("span");
+  nameEl.textContent = item.name;
+  b.appendChild(nameEl);
+  var priceEl = document.createElement("span");
+  priceEl.className = "price";
+  b.appendChild(priceEl);
+  b.insertAdjacentHTML("beforeend", LOCK_ICON_HTML);
+  b.addEventListener("click", function () {
+    if (isUnlocked(kind, item.id)) { return; }
+    if (buyItem(kind, item.id, item.price)) { SFX.equip(); refreshShop(); refreshMenu(); }
+  });
+  container.appendChild(b);
+  shopButtons.push({ el: b, item: item, kind: kind, priceEl: priceEl });
+}
+SHAPES.forEach(function (s) { addShopItem(elShopShapes, s, "shape"); });
+HATS.forEach(function (h) { addShopItem(elShopHats, h, "hat"); });
+
+COLORS.forEach(function (c) {
+  var b = document.createElement("button");
+  b.className = "sw";
+  b.setAttribute("aria-label", c.name);
+  b.title = c.name;
+  b.style.background = c.hex ? c.hex : "linear-gradient(135deg, #343a40 0 50%, #e6e9ee 50% 100%)";
+  var priceEl = document.createElement("span");
+  priceEl.className = "swPrice";
+  b.appendChild(priceEl);
+  b.addEventListener("click", function () {
+    if (isUnlocked("color", c.id)) { return; }
+    if (buyItem("color", c.id, c.price)) { SFX.equip(); refreshShop(); refreshMenu(); }
+  });
+  elShopColors.appendChild(b);
+  shopSwatches.push({ el: b, item: c, priceEl: priceEl });
+});
+
+function refreshShop() {
+  document.getElementById("shopCoins").textContent = pad5(totalCoins);
+  shopButtons.forEach(function (s) {
+    var owned = isUnlocked(s.kind, s.item.id);
+    s.el.classList.toggle("locked", !owned);
+    var lockEl = s.el.querySelector(".lock");
+    if (lockEl) { lockEl.hidden = owned; }
+    s.priceEl.textContent = owned ? "" : String(s.item.price);
+  });
+  shopSwatches.forEach(function (s) {
+    var owned = isUnlocked("color", s.item.id);
+    s.el.classList.toggle("locked", !owned);
+    s.priceEl.textContent = owned ? "" : String(s.item.price);
+  });
+}
+function openShop() { refreshShop(); show("shop"); SFX.ui(); }
 
 // --- Schalter ---
 var SWITCHES = [
@@ -2974,6 +3139,8 @@ elLvlCave.addEventListener("click", function () {
 document.getElementById("btnPlay").addEventListener("click", function () { SFX.ui(); startGame(); });
 document.getElementById("btnWardrobe").addEventListener("click", openWardrobe);
 document.getElementById("wBack").addEventListener("click", function () { SFX.ui(); toMenu(); });
+document.getElementById("btnShop").addEventListener("click", openShop);
+document.getElementById("shopBack").addEventListener("click", function () { SFX.ui(); toMenu(); });
 elGear.addEventListener("click", function () { audioInit(); openSettings("menu"); });
 document.getElementById("btnBack").addEventListener("click", closeSettings);
 document.getElementById("btnResume").addEventListener("click", resumeGame);
@@ -2992,6 +3159,7 @@ window.addEventListener("popstate", function () {
   if (screen === "game" || screen === "paused" || screen === "over") { musicStop(); toMenu(); }
   else if (screen === "settings") { closeSettings(); }
   else if (screen === "wardrobe") { toMenu(); }
+  else if (screen === "shop") { toMenu(); }
 });
 
 function firstGesture() {
