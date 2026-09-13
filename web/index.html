@@ -2173,23 +2173,33 @@ function drawCeiling() {
 // Strahl dort haette gar keinen Platz zum "hereinfallen". Deshalb separat
 // aufgerufen (siehe render(), direkt nach drawCeiling()).
 var LIGHT_HOLE_STEP = 1100;
+// Rand-Puffer (Weltdistanz = Bildschirmpixel, gleiche Einheit): Loecher
+// werden schon vor dem sichtbaren Rand berechnet UND blenden ueber genau
+// diese Zone weich ein/aus (siehe edgeFade unten), statt am Rand der
+// first/last-Reichweite abrupt zu erscheinen/verschwinden - "herausfahren"
+// wie jedes andere scrollende Objekt, kein Despawn.
+var LIGHT_HOLE_EDGE = 90;
 function drawCaveLightHoles() {
   if (state.caveVis <= 0.01) { return; }
   G = ctx;
   ctx.save();
-  var first = Math.floor(scrollCeiling / LIGHT_HOLE_STEP);
-  var last = Math.floor((scrollCeiling + LW) / LIGHT_HOLE_STEP) + 1;
+  var first = Math.floor((scrollCeiling - LIGHT_HOLE_EDGE) / LIGHT_HOLE_STEP);
+  var last = Math.floor((scrollCeiling + LW + LIGHT_HOLE_EDGE) / LIGHT_HOLE_STEP) + 1;
   for (var i = first; i <= last; i++) {
     if (rockNoise(i * 4441) < 0.85) { continue; }   // ~15% Trefferquote - bewusst selten
     var wx = i * LIGHT_HOLE_STEP + rockNoise(i * 271) * (LIGHT_HOLE_STEP - 140);
     var top = groundY - ceilingGapAt(wx);
     var sx = wx - scrollCeiling;
+    var edgeFade = Math.max(0, Math.min(1,
+      (sx + LIGHT_HOLE_EDGE) / LIGHT_HOLE_EDGE,
+      (LW + LIGHT_HOLE_EDGE - sx) / LIGHT_HOLE_EDGE));
+    if (edgeFade <= 0.01) { continue; }
     var beamW = 22 + rockNoise(i * 59) * 18;
     // Leichtes Schimmern statt eines starren Balkens - deterministisch per
     // Loch phasenverschoben (+i), damit nicht alle sichtbaren Loecher
     // synchron pulsieren.
     var shimmer = 0.75 + 0.25 * Math.sin(state.time * 0.6 + i * 2.4);
-    var a = state.caveVis * shimmer;
+    var a = state.caveVis * shimmer * edgeFade;
     ctx.globalCompositeOperation = "lighter";
     // Lichtkegel aus mehreren weichen, ueberlappenden Ellipsen statt einem
     // hart geclippten Dreieck - eine Ellipse (Radialverlauf) hat schon
