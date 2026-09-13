@@ -892,7 +892,9 @@ function newGame(attract) {
 // ========================================================= Partikel ========
 function spawnParticle(x, y, vx, vy, life, size, color) {
   if (particles.length > 160) { return; }
-  particles.push({ x: x, y: y, vx: vx, vy: vy, t: life, max: life, s: size, c: color });
+  var p = { x: x, y: y, vx: vx, vy: vy, t: life, max: life, s: size, c: color };
+  particles.push(p);
+  return p;
 }
 function dustPuff(x, y, n, power) {
   for (var i = 0; i < n; i++) {
@@ -1368,8 +1370,21 @@ function update(dt) {
       o.dripT -= move;
       if (o.dripT <= 0) {
         o.dripT = 260 + Math.random() * 340;
-        spawnParticle(o.x + o.w / 2, o.y + o.h, 0, 25,
-                      0.9 + Math.random() * 0.4, 1.6 + Math.random() * 1.2, "drip");
+        // vx = -state.speed statt 0: der Tropfen scrollt mit derselben
+        // Geschwindigkeit wie die Welt (Boden, Tropfstein selbst) statt
+        // bildschirmfest zu bleiben - sonst "haengt" er beim Fallen
+        // scheinbar hinter dem Tropfstein zurueck, was die Bewegungsillusion
+        // (Spieler steht fest, die Welt laeuft) durchbricht. So faellt er
+        // optisch sauber senkrecht unter der Spitze her.
+        var dropY = o.y + o.h;
+        var dp = spawnParticle(o.x + o.w / 2, dropY, -state.speed, 25,
+                                0.9 + Math.random() * 0.4, 1.6 + Math.random() * 1.2, "drip");
+        // startY fuer die Groessen-Interpolation beim Zeichnen (siehe
+        // drawParticles): der Tropfen soll erkennbar klein an der Spitze
+        // starten und beim Faellen zum Boden hin groesser werden - dieselbe
+        // Naeher-wirkt-groesser-Logik, die auch sonst die Bewegungsillusion
+        // dieses Spiels traegt.
+        if (dp) { dp.startY = dropY; }
       }
     }
     if (o.kind === "spider") {
@@ -1710,14 +1725,23 @@ function drawParticles() {
     ctx.globalAlpha = a * (p.c === "accent" ? 1 : 0.62);
     ctx.fillStyle = (p.c === "accent") ? theme.accent
       : (p.c === "drip" || p.c === "splash") ? "#6fc3e0" : theme.dust;
+    var sizeMul = 0.35 + a * 0.65;
+    // Ein "drip" waechst beim Fallen von klein (an der Spitze) zu groesser
+    // (am Boden) statt eine feste Groesse zu behalten - passt zur selben
+    // Naeher-wirkt-groesser-Logik, die die Bewegungsillusion des restlichen
+    // Spiels traegt, und macht die Fallbewegung selbst sichtbarer.
+    if (p.c === "drip" && p.startY !== undefined) {
+      var fallFrac = Math.max(0, Math.min(1, (p.y - p.startY) / (groundY - p.startY)));
+      sizeMul = 0.5 + fallFrac * 0.9;
+    }
     if (p.c === "splash") {
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.scale(1, 0.4);
-      ctx.beginPath(); ctx.arc(0, 0, p.s * (0.35 + a * 0.65), 0, 6.2832); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, p.s * sizeMul, 0, 6.2832); ctx.fill();
       ctx.restore();
     } else {
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (0.35 + a * 0.65), 0, 6.2832); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.s * sizeMul, 0, 6.2832); ctx.fill();
     }
   }
   ctx.globalAlpha = 1;
