@@ -1370,9 +1370,11 @@ function update(dt) {
     if (hits(o)) { die(); return; }
   }
 
-  // Kristalle: eigenes Array statt obstacles - hits() ist generisch (prueft
-  // nur x/y/w/h), laesst sich also direkt wiederverwenden, aber bei Treffer
-  // gibt es Bonuspunkte statt die() statt zu sterben.
+  // Muenzen (collectibles): eigenes Array statt obstacles - hits() ist
+  // generisch (prueft nur x/y/w/h), laesst sich also direkt wiederverwenden,
+  // aber bei Treffer gibt es Bonuspunkte statt die() statt zu sterben.
+  // Interne Variablennamen (crystalIn etc.) blieben bewusst unveraendert -
+  // reiner Optik-Umbau (drawCoin statt drawCrystal), keine Logikaenderung.
   if (state.caveOn) {
     for (i = collectibles.length - 1; i >= 0; i--) {
       var cr = collectibles[i];
@@ -1399,9 +1401,9 @@ function update(dt) {
       state.crystalIn = 1800 + Math.random() * 1200;
       // Immer auf dem Boden, nie in Sprunghoehe - ein Bonus darf nie eine
       // Verzicht-oder-Risiko-Entscheidung erzwingen, einfach durchlaufen
-      // reicht. variant waehlt eine von drei Cluster-Formen (siehe
-      // CRYSTAL_VARIANTS bei drawCrystal), fuer sichtbare Abwechslung wie
-      // bei drawRock().
+      // reicht. variant waehlt eine von drei Muenz-Metallfarben (siehe
+      // COIN_COLORS bei drawCoin), fuer sichtbare Abwechslung wie bei
+      // drawRock().
       collectibles.push({ x: LW + 20, y: groundY - 24, w: 20, h: 24,
                            variant: Math.floor(Math.random() * 3) });
     }
@@ -2250,33 +2252,15 @@ function drawPillar(o) {
   // nach oben - waere falsch geclippt. Der Stumpf ist klein genug, dass
   // die einfarbige Flaeche nicht auffaellt.
 }
-// Kristall: Bonus-Sammelobjekt, nie gefaehrlich - eigenes Array
-// (collectibles), nicht obstacles. Cluster aus mehreren spitzen Zacken
-// unterschiedlicher Hoehe von einer gemeinsamen Basis aus (Vorlage: echtes
-// Foto eines blauen Kristallstocks) - jeder Zacken zweifarbig (dunklerer
-// Koerper + helle Facette) fuer einen Glas-Eindruck. Drei Cluster-Formen
-// (CRYSTAL_VARIANTS) fuer sichtbare Abwechslung, wie bei drawRock().
 // Farbvarianten fuer die Boden-Kristallzacken (drawCactus, Hoehle) - je
 // Hindernis eine Variante, nicht je Zacke, damit ein Cluster wie eine
-// zusammenhaengende Formation wirkt statt bunt gemischt. Bewusst andere
-// Toene als das Sammelobjekt (CRYSTAL_VARIANTS/drawCrystal): das Hindernis
-// ist viel groesser und hat keinen Glimmer/Puls, Farbe allein soll trotzdem
-// nicht der einzige Unterschied zum ungefaehrlichen Kristall sein.
+// zusammenhaengende Formation wirkt statt bunt gemischt. Bleibt bestehen,
+// auch nachdem das Sammelobjekt selbst zur Muenze wurde (siehe drawCoin
+// unten) - das ist weiterhin das Hoehlen-HINDERNIS, keine Bonus-Sache.
 var CRYSTAL_HAZARD_COLORS = [
   { body: "#3a6fd8", facet: "#c9dcff" },
   { body: "#2ab7a0", facet: "#bdf3e6" },
   { body: "#5a5fc7", facet: "#d6d8ff" }
-];
-var CRYSTAL_VARIANTS = [
-  [ { dx: -0.32, h: 0.62, w: 0.34, tilt: -0.12 },
-    { dx: 0.05, h: 1.00, w: 0.42, tilt: 0 },
-    { dx: 0.38, h: 0.55, w: 0.30, tilt: 0.14 } ],
-  [ { dx: -0.18, h: 0.90, w: 0.42, tilt: -0.07 },
-    { dx: 0.30, h: 0.60, w: 0.32, tilt: 0.18 } ],
-  [ { dx: -0.32, h: 0.50, w: 0.28, tilt: -0.20 },
-    { dx: -0.02, h: 0.85, w: 0.38, tilt: 0.03 },
-    { dx: 0.32, h: 0.65, w: 0.30, tilt: 0.16 },
-    { dx: -0.08, h: 0.34, w: 0.20, tilt: -0.32 } ]
 ];
 // Weicher Farbschein hinter einem Kristall-Cluster - dieselbe Technik wie
 // der bisherige Sammelobjekt-Glimmer, jetzt als eigene Funktion, damit auch
@@ -2313,20 +2297,41 @@ function drawCrystalSpike(dx, h, w, tilt, body, facet) {
   ctx.beginPath(); ctx.moveTo(-w * 0.4, -h * 0.12); ctx.lineTo(0, -h); ctx.stroke();
   ctx.restore();
 }
-function drawCrystal(o) {
+// Muenze: Bonus-Sammelobjekt (ersetzt den bisherigen Kristall-Look auf
+// Nutzerwunsch) - flache Scheibe, die sich per horizontaler Skalierung um
+// die eigene Hochachse dreht (klassischer 2D-"Spin"-Trick), plus einem
+// weichen Glimmer (wiederverwendet drawCrystalGlow(), das ist eine
+// generische Radialverlauf-Funktion, keine Kristall-spezifische). Drei
+// Metall-Varianten (o.variant, wie bei drawRock()) fuer sichtbare
+// Abwechslung.
+var COIN_COLORS = [
+  { base: "#ffe27a", edge: "#b8860f", ring: "rgba(255,255,255,0.35)" },
+  { base: "#e8eef4", edge: "#8a97a3", ring: "rgba(255,255,255,0.45)" },
+  { base: "#e7a96b", edge: "#8a5a2e", ring: "rgba(255,255,255,0.30)" }
+];
+function drawCoin(o) {
   G = ctx;
-  var cx = o.x + o.w / 2, cy = o.y + o.h;
-  var pulse = 0.92 + 0.08 * Math.sin(state.time * 4 + o.x * 0.05);
+  var c = COIN_COLORS[o.variant % COIN_COLORS.length || 0];
+  var cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  var spin = Math.sin(state.time * 3 + o.x * 0.05);
+  var sx = Math.max(0.14, Math.abs(spin));
+  var pulse = 0.94 + 0.06 * Math.sin(state.time * 4 + o.x * 0.05);
   ctx.save();
   ctx.translate(cx, cy); ctx.scale(pulse, pulse);
-  drawCrystalGlow(0, -o.h * 0.4, o.w * 1.1, "#7fd8e8");
-  ctx.fillStyle = "#3a6470";
-  ctx.beginPath(); ctx.ellipse(0, 0, o.w * 0.52, o.h * 0.12, 0, 0, 6.2832); ctx.fill();
-  var spikes = CRYSTAL_VARIANTS[o.variant || 0];
-  for (var i = 0; i < spikes.length; i++) {
-    var s = spikes[i];
-    drawCrystalSpike(s.dx * o.w, s.h * o.h, s.w * o.w, s.tilt);
-  }
+  drawCrystalGlow(0, 0, o.w * 0.95, c.base);
+  ctx.save();
+  ctx.scale(sx, 1);
+  var grad = ctx.createLinearGradient(-o.w / 2, 0, o.w / 2, 0);
+  grad.addColorStop(0, c.edge);
+  grad.addColorStop(0.5, c.base);
+  grad.addColorStop(1, c.edge);
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, o.w / 2, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle = c.edge; ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.strokeStyle = c.ring; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0, 0, o.w * 0.32, 0, 6.2832); ctx.stroke();
+  ctx.restore();
   ctx.restore();
 }
 // Kopf vorn LINKS (Weltscroll bewegt Hindernisse nach links auf die Figur
@@ -2402,18 +2407,51 @@ function drawSpider(o) {
   ctx.beginPath(); ctx.arc(cx + 2.6, cy - 1, 1.3, 0, 6.2832); ctx.fill();
   ctx.globalAlpha = 1;
 }
-// Leichte Vignette in der Hoehle - dunkelt nur die Ecken ab, der komplette
-// Spielbereich (wo Hindernisse erscheinen) bleibt hell genug, um alles
-// rechtzeitig zu sehen. Bewusst kein "Taschenlampenkegel" um die Figur: die
-// steht nah am linken Rand, ein enger Kegel dort haette den ganzen rechten
-// Bildschirmbereich mit den Hindernissen abgedunkelt.
+// Taschenlampen-Lichtkegel um die Figur (auf Nutzerwunsch - eine fruehere
+// Fassung hatte das bewusst vermieden, siehe Git-Historie: die Figur steht
+// nah am linken Rand, ein zu enger Kegel wuerde den rechten Bildschirm-
+// bereich abdunkeln, wo Hindernisse zuerst auftauchen). Diesmal als Ellipse
+// statt Kreis geloest: der Mittelpunkt liegt ein Stueck VOR der Figur
+// (Richtung Laufrichtung) und rx ist grosszuegig - bei Hoechsttempo (960)
+// bleibt der komplette Bildschirm bis zum rechten Rand nur leicht
+// abgedunkelt (rechnerisch ~45% erhellt am aeussersten Rand), waehrend die
+// eigentliche Reaktionszone (deutlich naeher an der Figur) praktisch voll
+// hell bleibt - der Effekt betrifft vor allem das, was fuer die Fairness
+// ohnehin nicht zeitkritisch ist (ferne Deckenbereiche, der Boden weit
+// hinter der Figur). ry ist vertikal ebenfalls grosszuegig bemessen, damit
+// der gesamte Hindernis-relevante Hoehenbereich (Boden bis hoechste
+// Hoehlendecke, siehe CAVE_MAX_GAP) durchgehend hell bleibt - nur der
+// entfernte Himmel/die Bildschirmecken werden spuerbar dunkler, fuer die
+// gewuenschte "man sieht nicht alles"-Stimmung ohne Fairness-Verlust.
+// Wichtig: rein optisch - autoPilot() liest Objektdaten direkt, nicht
+// Pixel, ist von dieser Aenderung also gar nicht betroffen; die Fairness-
+// Ueberlegung hier gilt ausschliesslich der menschlichen Wahrnehmung und
+// laesst sich anders als Spiellogik-Aenderungen nicht per Soak-Test
+// verifizieren, nur durch die Geometrie oben bewusst grosszuegig waehlen.
 function drawCaveVignette() {
   if (!state.caveOn) { return; }
-  var g = ctx.createRadialGradient(LW * 0.5, LH * 0.55, LH * 0.62, LW * 0.5, LH * 0.55, LH * 1.05);
+  // Direkter Farbverlauf (source-over), KEIN destination-out: die Szene
+  // steht schon da, ich will sie an den Raendern nur ueberdunkeln, nicht
+  // irgendwohin "durchloechern" - anders als bei den Pfuetzen gibt es hier
+  // keine zweite Ebene dahinter, ein Loch wuerde nur den (hellen)
+  // Seitenhintergrund zeigen statt der Szene (das war der erste, falsche
+  // Versuch hier - siehe Git-Historie).
+  ctx.save();
+  var lightCx = RUNNER_X + 220, lightCy = groundY - 80;
+  var rx = 480, ry = 260;
+  ctx.translate(lightCx, lightCy);
+  ctx.scale(rx, ry);
+  var g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
   g.addColorStop(0, "rgba(0,0,0,0)");
-  g.addColorStop(1, "rgba(0,0,0,0.32)");
+  g.addColorStop(0.5, "rgba(0,0,0,0.05)");
+  g.addColorStop(0.8, "rgba(0,0,0,0.45)");
+  g.addColorStop(1, "rgba(0,0,0,0.88)");
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, LW, LH);
+  // Grosszuegig ueber die Ellipse hinaus fuellen (Farbverlauf wiederholt ab
+  // Radius 1 automatisch den letzten Farbstopp) - deckt so auch hohe/breite
+  // Bildschirme komplett ab, nicht nur das direkte Ellipsen-Rechteck.
+  ctx.fillRect(-6, -6, 12, 12);
+  ctx.restore();
 }
 // Spinnennetze in den oberen Ecken - feste Bildschirmposition, scrollt nicht
 // mit der Welt (reine Deko, kein Weltbezug noetig).
@@ -2489,7 +2527,7 @@ function render() {
   drawCaveGlow();
   drawGround();
   if (state.entering) { drawCaveArch(state.enterArchX); }
-  for (var ci = 0; ci < collectibles.length; ci++) { drawCrystal(collectibles[ci]); }
+  for (var ci = 0; ci < collectibles.length; ci++) { drawCoin(collectibles[ci]); }
   for (var i = 0; i < obstacles.length; i++) {
     var ob = obstacles[i];
     if (ob.kind === "bird") { drawBird(ob); }
