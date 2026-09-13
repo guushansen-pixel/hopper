@@ -911,15 +911,25 @@ function deathBurst(x, y) {
   }
 }
 // Kleiner Aufprall-Spritzer, wenn ein "drip"-Tropfen (siehe dripT bei
-// Stalaktit/-saeule) den Boden erreicht - flache, kurze radiale Streuung
+// Stalaktit/-saeule) sein Ziel erreicht - flache, kurze radiale Streuung
 // statt der kreisrunden deathBurst-Explosion, damit es wie Wasser statt
-// wie Staub/Funken wirkt.
-function dripSplash(x, y) {
+// wie Staub/Funken wirkt. split=true (Tropfsteinsaeule, siehe drawPillar):
+// der Tropfen trifft nicht den flachen Boden, sondern die Spitze des
+// Saeulenstumpfs - dort spritzt Wasser sichtbar nach links UND rechts
+// auseinander statt rundum, deshalb zwei getrennte Winkel-Cluster (mit
+// Luecke dazwischen) statt eines durchgehenden Bereichs.
+function dripSplash(x, y, split) {
   for (var i = 0; i < 4; i++) {
-    var a = Math.PI + Math.random() * Math.PI;
+    var a;
+    if (split) {
+      var left = (i % 2 === 0);
+      a = (left ? Math.PI * 1.15 : Math.PI * 1.85) + (Math.random() - 0.5) * (Math.PI * 0.3);
+    } else {
+      a = Math.PI + Math.random() * Math.PI;
+    }
     var sp = 20 + Math.random() * 45;
     spawnParticle(x, y, Math.cos(a) * sp, Math.sin(a) * sp * 0.5 - 30,
-                  0.18 + Math.random() * 0.14, 1 + Math.random() * 1.2, "splash");
+                  0.18 + Math.random() * 0.14, 1.5 + Math.random() * 1.6, "splash");
   }
 }
 
@@ -1290,10 +1300,12 @@ function update(dt) {
     if (p.t <= 0) { particles.splice(pi, 1); continue; }
     p.vy += 520 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
     // Ein fallender Tropfstein-Tropfen endet nicht per Lebenszeit-Ablauf,
-    // sondern sobald er wirklich am Boden ankommt - danach ein kurzer
-    // Spritzer statt eines einfach verblassenden Punkts.
-    if (p.c === "drip" && p.y >= groundY) {
-      dripSplash(p.x, groundY);
+    // sondern sobald er sein Ziel erreicht - je nach Herkunft entweder der
+    // flache Boden oder (Tropfsteinsaeule) die Spitze des Saeulenstumpfs
+    // (siehe landY oben) - danach ein kurzer Spritzer statt eines einfach
+    // verblassenden Punkts.
+    if (p.c === "drip" && p.y >= (p.landY !== undefined ? p.landY : groundY)) {
+      dripSplash(p.x, p.landY !== undefined ? p.landY : groundY, p.split);
       particles.splice(pi, 1);
     }
   }
@@ -1378,13 +1390,21 @@ function update(dt) {
         // optisch sauber senkrecht unter der Spitze her.
         var dropY = o.y + o.h;
         var dp = spawnParticle(o.x + o.w / 2, dropY, -state.speed, 25,
-                                0.9 + Math.random() * 0.4, 1.6 + Math.random() * 1.2, "drip");
+                                0.9 + Math.random() * 0.4, 2.2 + Math.random() * 1.6, "drip");
         // startY fuer die Groessen-Interpolation beim Zeichnen (siehe
         // drawParticles): der Tropfen soll erkennbar klein an der Spitze
-        // starten und beim Faellen zum Boden hin groesser werden - dieselbe
+        // starten und beim Faellen zum Ziel hin groesser werden - dieselbe
         // Naeher-wirkt-groesser-Logik, die auch sonst die Bewegungsillusion
-        // dieses Spiels traegt.
-        if (dp) { dp.startY = dropY; }
+        // dieses Spiels traegt. landY/split: bei der Tropfsteinsaeule
+        // (drawPillar) steht ein dekorativer Stumpf auf dem Boden, der
+        // Tropfen kommt also an dessen Spitze an (groundY - stubH), nicht
+        // auf dem flachen Boden - und spritzt dort sichtbar nach links/
+        // rechts auseinander statt rundum (siehe dripSplash split-Zweig).
+        if (dp) {
+          dp.startY = dropY;
+          if (o.kind === "pillar") { dp.landY = groundY - o.stubH; dp.split = true; }
+          else { dp.landY = groundY; }
+        }
       }
     }
     if (o.kind === "spider") {
@@ -1731,7 +1751,8 @@ function drawParticles() {
     // Naeher-wirkt-groesser-Logik, die die Bewegungsillusion des restlichen
     // Spiels traegt, und macht die Fallbewegung selbst sichtbarer.
     if (p.c === "drip" && p.startY !== undefined) {
-      var fallFrac = Math.max(0, Math.min(1, (p.y - p.startY) / (groundY - p.startY)));
+      var landYv = p.landY !== undefined ? p.landY : groundY;
+      var fallFrac = Math.max(0, Math.min(1, (p.y - p.startY) / (landYv - p.startY)));
       sizeMul = 0.5 + fallFrac * 0.9;
     }
     if (p.c === "splash") {
