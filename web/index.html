@@ -521,7 +521,7 @@ var LAVA_FS = "precision mediump float;\n" +
   "  vec3 cool = vec3(0.10, 0.02, 0.01);\n" +
   "  vec3 hot = vec3(1.0, 0.55, 0.08);\n" +
   "  vec3 col = mix(cool, hot, heat);\n" +
-  "  float vertFade = pow(uv.y, 1.3);\n" +
+  "  float vertFade = pow(1.0 - uv.y, 1.6);\n" +
   "  float alpha = (0.10 + heat * 0.55) * vertFade;\n" +
   "  gl_FragColor = vec4(col * alpha, alpha);\n" +
   "}";
