@@ -1458,24 +1458,45 @@ function update(dt) {
     }
   }
   state.crystalIn -= dx;
-  if (state.crystalIn <= 0) {
-    // 420-800 spawnte in einem 8-Minuten-Soak 539 Kristalle (ein Kristall
-    // ca. alle 0.9s) - fuehlte sich eher wie ein Dauerzustand an als wie
-    // ein besonderer Fund. 900-1600 war mit 632 in 20 Minuten (~alle 1.9s)
-    // immer noch zu dicht - der Weltabstand ist fix, aber state.speed
-    // waechst uebers Spiel, dieselbe Distanz kommt also in echter Zeit
-    // immer schneller wieder (siehe nextMountainGap() fuer dasselbe
-    // Problem bei den Bergabschnitten). 1800-3000 spawnte 335 in 20
-    // Minuten (~alle 3,6s) - fuehlt sich nach einem echten Fund an, nicht
-    // nach einem Dauerzustand.
-    state.crystalIn = 1800 + Math.random() * 1200;
-    // Immer auf dem Boden, nie in Sprunghoehe - ein Bonus darf nie eine
-    // Verzicht-oder-Risiko-Entscheidung erzwingen, einfach durchlaufen
-    // reicht. variant waehlt eine von drei Muenz-Metallfarben (siehe
-    // COIN_COLORS bei drawCoin), fuer sichtbare Abwechslung wie bei
-    // drawRock().
-    collectibles.push({ x: LW + 20, y: groundY - 24, w: 20, h: 24,
-                         variant: Math.floor(Math.random() * 3) });
+  // Nicht waehrend eines Bergabschnitts spawnen: Felsen rollen dort mit
+  // Extratempo (ROLL_ACCEL, siehe update()) schneller als der normale
+  // Weltscroll und koennten eine bereits gespawnte Muenze im Nachhinein
+  // einholen, obwohl beim Spawnen selbst noch kein Ueberlapp bestand -
+  // fuer diesen einen Sonderfall einfach ganz aussetzen ist robuster als
+  // die Aufholbewegung vorauszuberechnen.
+  if (state.crystalIn <= 0 && !state.mountainOn) {
+    // Nicht spawnen, wenn dabei ein Hindernis ueberlappt wuerde - sonst
+    // laege die Muenze sichtbar IM Hindernis oder waere beim Ausweichen
+    // (Sprung/Ducken) gar nicht erreichbar. Grosszuegiger Puffer nach
+    // beiden Seiten um den gemeinsamen Spawnpunkt (LW+20), weil neue
+    // Hindernisse an genau derselben Stelle entstehen. Bleibt der Timer
+    // negativ, wird im naechsten Frame einfach erneut geprueft - die
+    // Muenze verzoegert sich dadurch hoechstens kurz, geht nie verloren.
+    var coinX = LW + 20, coinW = 20;
+    var clear = true;
+    for (var oi = 0; oi < obstacles.length; oi++) {
+      var ob2 = obstacles[oi];
+      if (ob2.x < coinX + coinW + 70 && ob2.x + ob2.w > coinX - 70) { clear = false; break; }
+    }
+    if (clear) {
+      // 420-800 spawnte in einem 8-Minuten-Soak 539 Kristalle (ein Kristall
+      // ca. alle 0.9s) - fuehlte sich eher wie ein Dauerzustand an als wie
+      // ein besonderer Fund. 900-1600 war mit 632 in 20 Minuten (~alle 1.9s)
+      // immer noch zu dicht - der Weltabstand ist fix, aber state.speed
+      // waechst uebers Spiel, dieselbe Distanz kommt also in echter Zeit
+      // immer schneller wieder (siehe nextMountainGap() fuer dasselbe
+      // Problem bei den Bergabschnitten). 1800-3000 spawnte 335 in 20
+      // Minuten (~alle 3,6s) - fuehlt sich nach einem echten Fund an, nicht
+      // nach einem Dauerzustand.
+      state.crystalIn = 1800 + Math.random() * 1200;
+      // Immer auf dem Boden, nie in Sprunghoehe - ein Bonus darf nie eine
+      // Verzicht-oder-Risiko-Entscheidung erzwingen, einfach durchlaufen
+      // reicht. variant waehlt eine von drei Muenz-Metallfarben (siehe
+      // COIN_COLORS bei drawCoin), fuer sichtbare Abwechslung wie bei
+      // drawRock().
+      collectibles.push({ x: coinX, y: groundY - 24, w: coinW,
+                           h: 24, variant: Math.floor(Math.random() * 3) });
+    }
   }
 
   // Die Decke selbst ist seit 1.17 reine Optik, keine Kollision mehr (siehe
@@ -2142,6 +2163,66 @@ function drawCeiling() {
   }
   ctx.restore();
 }
+// Lichtloecher: seltene Oeffnungen in der Hoehlendecke, durch die Tageslicht
+// hereinfaellt - rein dekorativ, gibt der sonst gleichmaessig dunklen Decke
+// mehr Tiefe. Gleiche deterministische world-x-Technik wie die Deckendetails
+// oben (rockNoise-Schwellenwert an festen Schritten, damit es beim Scrollen
+// nicht flackert/driftet), aber eine eigene, UNGECLIPPTE Funktion: der
+// Lichtstrahl soll in den offenen Hoehlenraum UNTER der Decke fallen, waehrend
+// drawCeiling() alles auf die Felsmasse OBERHALB der Deckenlinie clippt - ein
+// Strahl dort haette gar keinen Platz zum "hereinfallen". Deshalb separat
+// aufgerufen (siehe render(), direkt nach drawCeiling()).
+var LIGHT_HOLE_STEP = 1100;
+function drawCaveLightHoles() {
+  if (state.caveVis <= 0.01) { return; }
+  G = ctx;
+  ctx.save();
+  var first = Math.floor(scrollCeiling / LIGHT_HOLE_STEP);
+  var last = Math.floor((scrollCeiling + LW) / LIGHT_HOLE_STEP) + 1;
+  for (var i = first; i <= last; i++) {
+    if (rockNoise(i * 4441) < 0.85) { continue; }   // ~15% Trefferquote - bewusst selten
+    var wx = i * LIGHT_HOLE_STEP + rockNoise(i * 271) * (LIGHT_HOLE_STEP - 140);
+    var top = groundY - ceilingGapAt(wx);
+    var sx = wx - scrollCeiling;
+    var beamW = 22 + rockNoise(i * 59) * 18;
+    // Leichtes Schimmern statt eines starren Balkens - deterministisch per
+    // Loch phasenverschoben (+i), damit nicht alle sichtbaren Loecher
+    // synchron pulsieren.
+    var shimmer = 0.75 + 0.25 * Math.sin(state.time * 0.6 + i * 2.4);
+    var a = state.caveVis * shimmer;
+    ctx.globalCompositeOperation = "lighter";
+    // Lichtkegel aus mehreren weichen, ueberlappenden Ellipsen statt einem
+    // hart geclippten Dreieck - eine Ellipse (Radialverlauf) hat schon
+    // konstruktionsbedingt keine gerade Kante, dadurch wirkt der Strahl
+    // diffus statt wie ein technisches Polygon. Gleicher Scale+Radialverlauf-
+    // Trick fuer Ellipsen wie beim Edelsteinschein/der Taschenlampe.
+    var steps = 16;
+    for (var s = 0; s <= steps; s++) {
+      var t = s / steps;
+      var y = top + t * (groundY - top);
+      var rx = beamW * (0.28 + t * 0.85);
+      var ry = 20 + t * 8;
+      var stepA = a * (0.24 - t * 0.19);
+      if (stepA <= 0.01) { continue; }
+      ctx.save();
+      ctx.translate(sx, y);
+      ctx.scale(rx, ry);
+      var slice = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      slice.addColorStop(0, "rgba(255,240,205," + stepA + ")");
+      slice.addColorStop(1, "rgba(255,230,180,0)");
+      ctx.fillStyle = slice;
+      ctx.beginPath(); ctx.arc(0, 0, 1, 0, 6.2832); ctx.fill();
+      ctx.restore();
+    }
+    var glow = ctx.createRadialGradient(sx, top, 0, sx, top, beamW * 0.5);
+    glow.addColorStop(0, "rgba(255,250,225," + (0.9 * a) + ")");
+    glow.addColorStop(1, "rgba(255,250,225,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(sx, top, beamW * 0.5, 0, 6.2832); ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+  }
+  ctx.restore();
+}
 // Torbogen ("Hoehlentuer"), auf den die Figur waehrend der Einlauf-Sequenz
 // zulaeuft - reine Landmarke, keine Kollision (die Sequenz laesst wie in
 // update() beschrieben gar nichts toedlich werden). Scrollt normal mit
@@ -2569,6 +2650,7 @@ function render() {
   drawCeiling();   // nach Wolken/Bergen/Duenen - die Decke deckt Himmel und
                     // Kulisse darunter ab, sonst wuerden Wolken sichtbar
                     // durch massiven Fels hindurch schweben.
+  drawCaveLightHoles();
   drawCaveGlow();
   drawGround();
   if (state.entering) { drawCaveArch(state.enterArchX); }
