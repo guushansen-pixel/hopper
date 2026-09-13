@@ -2160,8 +2160,61 @@ function drawIcicleTexture(x, y, w, h, seed) {
   ctx.globalAlpha = 1;
   ctx.restore();
 }
+// Reflektierende Pfuetze am Boden unter einem Tropfstein - dort, wo die
+// Tropfen von der Spitze (siehe dripT in update()) tatsaechlich ankommen.
+// Canvas 2D hat kein echtes Raytracing/Shader-Pipeline (das braeuchte einen
+// WebGL-Kontext, ein kompletter Umbau der Rendering-Basis dieses Spiels) -
+// derselbe "nass/spiegelnd"-Eindruck laesst sich aber mit reinen 2D-Mitteln
+// erzeugen: ein dunkler Farbverlauf als Wasserflaeche, ein weicher heller
+// Schein von oben (Andeutung einer Spiegelung der Deckenbeleuchtung/des
+// Tropfsteins selbst statt einer exakten gespiegelten Kopie - echte
+// Wasserreflexionen sind ohnehin nie scharf) und ein einzelner wandernder
+// Glanzstreifen, der ueber die Zeit langsam ueber die Flaeche laeuft und
+// damit den einzigen wirklich "shaderhaften" Teil des Effekts liefert
+// (Licht, das sich bewegt, nicht nur eine statische Textur).
+function drawPuddle(o) {
+  G = ctx;
+  var cx = o.x + o.w / 2, py = groundY - 1;
+  var pw = Math.max(50, o.w * 2.2), ph = pw * 0.2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, py, pw / 2, ph / 2, 0, 0, 6.2832);
+  ctx.clip();
+
+  var base = ctx.createRadialGradient(cx, py - ph * 0.1, 0, cx, py, pw / 2);
+  base.addColorStop(0, "rgba(70,95,110,0.75)");
+  base.addColorStop(0.6, "rgba(25,38,48,0.65)");
+  base.addColorStop(1, "rgba(8,12,18,0.5)");
+  ctx.fillStyle = base;
+  ctx.fillRect(cx - pw, py - ph * 2, pw * 2, ph * 3);
+
+  var reflH = Math.min(ph * 0.9, 14);
+  var refl = ctx.createLinearGradient(cx, py - reflH, cx, py);
+  refl.addColorStop(0, "rgba(200,215,225,0.30)");
+  refl.addColorStop(1, "rgba(200,215,225,0)");
+  ctx.fillStyle = refl;
+  ctx.beginPath();
+  ctx.moveTo(cx - o.w * 0.35, py);
+  ctx.lineTo(cx, py - reflH);
+  ctx.lineTo(cx + o.w * 0.35, py);
+  ctx.closePath(); ctx.fill();
+
+  var sweep = ((state.time * 36 + o.x * 1.7) % (pw * 2.4)) - pw * 1.2;
+  var sheen = ctx.createLinearGradient(cx + sweep - 10, 0, cx + sweep + 10, 0);
+  sheen.addColorStop(0, "rgba(255,255,255,0)");
+  sheen.addColorStop(0.5, "rgba(255,255,255,0.4)");
+  sheen.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = sheen;
+  ctx.fillRect(cx - pw, py - ph, pw * 2, ph * 2);
+  ctx.restore();
+
+  ctx.strokeStyle = "rgba(190,225,235,0.28)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(cx, py, pw / 2, ph / 2, 0, 0, 6.2832); ctx.stroke();
+}
 function drawStalactite(o) {
-  G = ctx; ctx.fillStyle = CAVE_ROCK;
+  G = ctx;
+  drawPuddle(o);
+  ctx.fillStyle = CAVE_ROCK;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
   ctx.lineTo(o.x + o.w, o.y);
@@ -2175,7 +2228,9 @@ function drawStalactite(o) {
 // liest es sich wie eine fast geschlossene Saeule mit einem schmalen Spalt,
 // durch den man ducken muss. o.stubH ist nur Optik, keine eigene Kollision.
 function drawPillar(o) {
-  G = ctx; ctx.fillStyle = CAVE_ROCK;
+  G = ctx;
+  drawPuddle(o);
+  ctx.fillStyle = CAVE_ROCK;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
   ctx.lineTo(o.x + o.w, o.y);
