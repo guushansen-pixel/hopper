@@ -47,7 +47,7 @@ func _ready() -> void:
 
 # ============================================================== Phase 4 ====
 # HDR2D + WorldEnvironment-Glow - der eigentliche Grund fuer den Godot-
-# Umstieg (siehe Plan/README): Farben mit Kanalwerten > 1.0 (siehe
+# Umstieg (siehe Plan/godot/README.md): Farben mit Kanalwerten > 1.0 (siehe
 # _draw_poison()/_draw_crystal()) leuchten damit sichtbar, statt bei 1.0
 # geclamped zu werden. "viewport/hdr_2d=true" muss zusaetzlich in
 # project.godot gesetzt sein, sonst hat HDR-Farbe keine Wirkung.
@@ -290,7 +290,7 @@ func _draw_poison(x: float, y: float, w: float, h: float) -> void:
     draw_circle(c - Vector2(w * 0.12, h * 0.12), w * 0.14, Color(1.6, 3.5, 2.0))
 
 # Kristall-Reskin des Kaktus in der Hoehle (rein optisch, dieselbe
-# Kollisionsbox - siehe web/README.md "Kristall-Skin"): facettierter
+# Kollisionsbox - siehe hopper/CHANGELOG.md "Kristall-Skin"): facettierter
 # Diamant mit HDR-Glow statt der flachen gruenen Wueste-Box.
 func _draw_crystal(x: float, y: float, w: float, h: float) -> void:
     var cx := x + w * 0.5

@@ -1,5 +1,5 @@
 # Kopfloser Soak-Test - das Godot-Aequivalent der bisherigen Browser-
-# Autopilot-Soaks (siehe web/README.md). Laeuft ohne Fenster/Rendering:
+# Autopilot-Soaks (siehe hopper/CHANGELOG.md). Laeuft ohne Fenster/Rendering:
 #
 #   godot --headless --path <projekt> -s res://tests/soak_test.gd -- --seconds=1800 --seed=1 --cave=0
 #
@@ -24,7 +24,7 @@
 # -saeule) bestaetigt sich die Vermutung: die Rate faellt auf 20-22/1800s
 # (seed 1 und 3, ausschliesslich bei Hoechsttempo 960, ueberwiegend Kaktus) -
 # das liegt innerhalb der historisch akzeptierten Rate des JS-Originals
-# ("2-9 Abstuerze pro 5 Minuten" als Normalfall, siehe web/README.md zum
+# ("2-9 Abstuerze pro 5 Minuten" als Normalfall, siehe hopper/CHANGELOG.md zum
 # Fledermaus-Wobble-Bug 1.24). Hoehlen-Modus (cave=1): 0 Tode in 1800s bei
 # allen 6 Hindernisarten inkl. Tropfstein/-saeule - dort greift NICHT die
 # 0.72-Dichte-Untergrenze (die gilt nur ausserhalb der Hoehle), was die
@@ -38,7 +38,7 @@ extends SceneTree
 # registriert - "HopperSim" ist ohne expliziten preload() hier nicht bekannt,
 # selbst obwohl hopper_sim.gd `class_name HopperSim` deklariert.
 #
-# ZWEITE FALLE (gefunden in Phase 1, siehe README): GDScripts `:=`-
+# ZWEITE FALLE (gefunden in Phase 1, siehe godot/README.md): GDScripts `:=`-
 # Typinferenz scheitert leise an Dictionary-Feldzugriffen (o.x ist Variant) -
 # UND ein Skript mit diesem Parse-Fehler haengt sich beim Laden scheinbar
 # unendlich auf (Godots Skript-Neulade-Mechanismus rotiert), statt sauber

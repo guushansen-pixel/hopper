@@ -1152,7 +1152,7 @@ function spawnStalactite() {
 // springen". Nicht durch Simulation geraten, sondern aus derselben
 // hits()-Formel hergeleitet wie beim normalen Stalaktiten, dann mit
 // echtem Kollisionstest bei mehreren Tipp-Werten verifiziert (siehe
-// README) - der Sicherheitsabstand zu beiden Grenzen (23 bzw. 40) ist
+// CHANGELOG.md) - der Sicherheitsabstand zu beiden Grenzen (23 bzw. 40) ist
 // bewusst grosszuegig.
 var PILLAR_TIP_MIN = 26, PILLAR_TIP_MAX = 36;
 function spawnPillar() {
@@ -1264,7 +1264,7 @@ function autoPilot() {
     // unterwegs als state.speed allein - ohne das hier einzurechnen, timt
     // der Autopilot systematisch zu spaet und stolperte in dichten
     // Felsabschnitten wiederholt (127 von 135 Abstuerzen in 10 Minuten bei
-    // zu enger Taktung, siehe README).
+    // zu enger Taktung, siehe CHANGELOG.md).
     var closingSpeed = state.speed + (o.kind === "rock" ? o.rollExtra : 0) +
                         (o.kind === "bat" ? o.diveExtra : 0);
     var tContact = (o.x - (RUNNER_X + 46)) / closingSpeed;

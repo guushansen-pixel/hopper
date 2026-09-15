@@ -2,278 +2,63 @@
 
 Endless Runner als reine Web-App, die per [apk-builder](../apk-builder)
 zu einer Android-APK wird. Laeuft komplett offline, ohne Abhaengigkeiten,
-alles in einer Datei.
+alles in einer Datei (`web/index.html`). Stand: **1.56** (versionCode 61).
 
-## Aktiver Stand: wieder WebView (`web/`)
+Diese README ist die **aktuelle Referenz**. Weitere Dokumente:
 
-Die Godot-Migration (siehe Abschnitt unten) wurde komplett durchgezogen
-(Phase 0-7) und auf dem Geraet installiert, aber im direkten Vergleich
-wirkte Godots Rendering (bewusst schlicht gehalten, "Funktion vor Politur")
-deutlich hinter der gewachsenen `web/`-Version zurueck ("sieht aus wie aus
-der Steinzeit"). Auf Nutzerwunsch ist die WebView-Version (`web/`,
-unveraendert) seit **V17** wieder die aktive App auf dem Geraet -
-`com.daniel.hopper`, Versionscode 35 (ueber Godots 34), installiert sich
-dadurch als sauberes Update ueber die Godot-App (identisches
-Signatur-Zertifikat, geteilter Keystore). Der Godot-Code bleibt vollstaendig
-im Repo (`godot/`) erhalten und jederzeit wieder installierbar - siehe
-`C:\Users\Daniel\.claude\plans\kannst-du-hier-direkt-indexed-pelican.md`
-(Abschnitt "Visueller/UI-Vollausbau", Phase 8-13) fuer eine vollstaendige
-Bestandsaufnahme, was Godot gegenueber `web/` visuell/spielerisch noch
-fehlt, falls das Thema spaeter wieder aufgegriffen wird.
+- [CLAUDE.md](CLAUDE.md) - Arbeitsanleitung (Bauen, Testen, Konventionen)
+- [CHANGELOG.md](CHANGELOG.md) - chronologisches Entwicklungsprotokoll mit
+  allen Begruendungen, verworfenen Versuchen und Soak-Messungen
+- [godot/README.md](godot/README.md) - archivierte Godot-Portierung
+  (Phase 0-7). Seit V17 ist wieder die WebView-Version aktiv, Godot wirkte
+  im Vergleich "wie aus der Steinzeit"; der Code bleibt im Repo.
 
-## Godot-Migration (abgeschlossen, Phase 0-7, siehe godot/)
+## Spielinhalt
 
-`web/` blieb die ganze Migration ueber unveraendert als Fallback. Grund fuer
-den Umstieg: der User wollte echte Partikel-/Glow-Effekte ("3D-Partikel"),
-dabei aber das bestehende 2D-Gameplay/Physik/Fairness-Tuning unveraendert
-lassen - Godot statt Unity, weil MIT-lizenziert und ohne Risiko kuenftiger
-Lizenzaenderungen (siehe apk-builder/CLAUDE.md fuer die Toolchain-Seite).
-Voller Plan:
-`C:\Users\Daniel\.claude\plans\kannst-du-hier-direkt-indexed-pelican.md`.
+Drei getrennte Level mit je eigenem Bestwert. Ein Level wird im Menue
+gewaehlt, sobald es freigeschaltet ist:
 
-**Phase 0 (Toolchain)**: fertig, verifiziert (siehe apk-builder-Commit
-"Zweite Build-Faehigkeit").
+| Level | Ziel | Hindernisse |
+|---|---|---|
+| 1 Wueste | Fortschritt in Prozent, 100% bei Rohscore 3000 (`CAVE_START`) -> schaltet die Hoehle frei | Kaktus-Gruppen, Voegel (drei Hoehen), Schlangen; seltene Bergabschnitte nur mit rollenden Felsen |
+| 2 Hoehle | Punkte; bei 4000 (`LAVA_START`) -> schaltet die Lavahoehle frei | Kristallzacken (Kaktus-Hitbox), Fledermaeuse (Schwarm, fliegen aktiv zu), Haengespinne (Duck-Fenster), Stalaktit (nicht springen), Tropfsteinsaeule (ducken) |
+| 3 Lavahoehle | Punkte, offenes Ende | wie Level 2, mit Glut-/Lava-Optik |
 
-**Phase 1 (Kern-Physik + ein Hindernis + Bot + Soak-Harness)**: begonnen.
-`godot/scripts/hopper_sim.gd` portiert Laeufer-Physik (Sprung/Schwerkraft/
-Coyote/Buffer), `hits()`-Kollision und den Kaktus-Spawn wortgleich aus
-`web/index.html`; `godot/tests/soak_test.gd` ist das Godot-Aequivalent der
-bisherigen Browser-Autopilot-Soaks (`godot --headless --path godot -s
-res://tests/soak_test.gd -- --seconds=1800 --seed=1`).
+Die Schwierigkeit steigt ueber Rampen statt harter Schwellen (`rampChance`).
+Die Hoehlendecke ist reine Optik ohne Kollision. Ein Levelabschluss laeuft
+ueber eine Einlauf-Sequenz (Torbogen, schwarze Blende), in der man nicht
+sterben kann.
 
-Beim ersten echten Soak-Lauf direkt ein echter Fund (nicht nur Toolchain-
-Kram): der deterministische Hoehen-/Breitentest zeigt jedes Kaktus-Cluster
-(1-3, hoch/niedrig) bei jedem Tempo zwischen 330 und 960 als einzeln
-ueberspringbar, UND das minimale Reaktionsfenster liegt bei >=267ms (JS-
-Basiswert: 283ms, Differenz ist Frame-Rundung, kein echter Unterschied) -
-trotzdem 139 Tode in 1800 simulierten Sekunden. Ursache: `obstacleGap()`s
-Dichte-Untergrenze (Faktor 0.72, wortgleich aus dem JS-Original) laesst bei
-manchen Zufallswerten zu wenig Abstand zwischen zwei AUFEINANDERFOLGENDEN
-Kakteen, um vom ersten Sprung zum spaetesten Absprungpunkt des naechsten zu
-kommen. Vermutlich kein Godot-spezifischer Bug, sondern eine Eigenschaft der
-Formel, die im echten Spiel durch die Durchmischung mit Voegeln/Schlangen/
-etc. verduennt wird - in der Kaktus-Monokultur von Phase 1 (bewusst nur ein
-Hindernistyp) tritt sie viel deutlicher auf. Bewusst NICHT jetzt gefixt:
-gehoert zum vollen Spawn-/Dichte-System, das laut Plan erst in Phase 2 (mit
-der vollen Hindernis-Mischung) uebertragen und dort neu verifiziert wird.
+**Test-Trick**: 5x schnell (< 1,5 s) auf eine gesperrte Level-Kachel tippen
+schaltet sie frei.
 
-Zwei GDScript-Eigenheiten beim Bauen gefunden, fuer spaetere Phasen wichtig:
-`-s script.gd`-Kopflosmodus registriert offenbar keine globalen
-`class_name`-Bezeichner (`preload()` stattdessen verwenden), und `:=`-Typinferenz
-scheitert leise an Dictionary-Feldzugriffen (`o.x` ist Variant) - das
-verursachte einen scheinbaren Absturz/Haenger (Godots Skript-Neulade-
-Mechanismus versucht ein Skript mit Parse-Fehler endlos neu zu kompilieren,
-statt sauber abzubrechen). Immer explizite `: float =`/`float(...)`
-verwenden, nie `:=`, wenn ein Dictionary-Feld beteiligt ist.
+## Muenzen und Shop
 
-**Phase 2 (restliche Hindernisse + volles Spawn-/Dichte-System)**: fertig.
-`hopper_sim.gd` erweitert um Vogel (3 Hoehenbahnen), Schlange+Gift-Kopplung
-(mit dem bereits im WebView-Original verifizierten 600-750-Zwangsabstand),
-Felsen (Bergabschnitte, `rollExtra`-Beschleunigung), Tropfstein/-saeule
-(Hoehlendecke als reine Sinuswelle, `cave_on`-Flag), sowie den kompletten
-`spawnObstacle()`-Dispatcher samt Prioritaetsreihenfolge und der
-"Forced-Gap"-Konvention (Rueckgabewert statt normaler `obstacleGap()`).
+Muenzen liegen immer auf dem Boden (nie in Sprunghoehe) und kommen etwa alle
+1800-3000 Welteinheiten. Eine Muenze gibt +25 auf den Lauf-Score und +1 auf
+die dauerhafte Waehrung `totalCoins` - nur im echten Spiel, nicht im
+Vorfuehrmodus des Menues.
 
-**Wichtige Korrektur dabei gefunden**: Phase 1 hatte `score` faelschlich mit
-der rohen, kontinuierlichen Distanz gleichgesetzt. Im JS-Original ist
-`state.score = floor(state.distance/14) + state.bonus` - eine ABGELEITETE,
-14x langsamer wachsende Groesse, gegen die ALLE Schwellenwerte (Vogel/
-Schlange/Gift-Start, CAVE_START, Dichtefaktor) verglichen werden. Ohne die
-Korrektur waere in Phase 2 z.B. `CAVE_START=3000` nach Sekunden statt nach
-einem ganzen Level "erreicht" gewesen. Jetzt: `distance` ist der gespeicherte
-Rohwert, `score()` eine abgeleitete Funktion - wortgleich zum JS-Original.
+Im Shop werden Garderobe-Teile freigeschaltet (`unlocked`), getragen wird
+dann ueber die Garderobe (`look`). Von Anfang an frei: Hund, Farbe
+"Standard", ohne Kopfbedeckung. Preise: Katze 35, Hase 55, jede Farbe 20,
+jede Kopfbedeckung 25.
 
-**Dritte GDScript-Falle**: `min()`/`max()` sind generische Builtins und geben
-bei `:=`-Deklaration ebenfalls einen nicht inferierbaren Variant-Typ zurueck
-(exakt derselbe stille Haenger wie bei Dictionary-Feldern) - auch hier immer
-`: float =` statt `:=`.
+## Speicher (localStorage)
 
-**Soak-Ergebnis (voller Mix, siehe `godot/tests/soak_test.gd`)**: der in
-Phase 1 isolierte Kaktus-Dichte-Fund bestaetigt sich als Ursache, aber die
-tatsaechliche Rate faellt mit dem vollen Hindernis-Mix auf 20-22 Tode pro
-1800 simulierten Sekunden (zwei Seeds, ausschliesslich bei Hoechsttempo
-960, ueberwiegend Kaktus) - das liegt innerhalb der historisch akzeptierten
-Rate des JS-Originals ("2-9 Abstuerze pro 5 Minuten" als Normalfall, siehe
-Fledermaus-Wobble-Bug 1.24 weiter oben in diesem Dokument). Hoehlen-Modus
-(`cave_on=true`): **0 Tode in 1800s** bei allen 6 Hindernisarten inkl.
-Tropfstein/-saeule - dort gilt die 0.72-Dichte-Untergrenze nicht (nur
-ausserhalb der Hoehle), was die Diagnose zusaetzlich stuetzt. Bewertung:
-keine neue Regression durch die Portierung, sondern eine bereits im
-JS-Original akzeptierte Grundrate, die in der Kaktus-Monokultur von Phase 1
-nur ueberproportional sichtbar wurde.
+| Key | Inhalt |
+|---|---|
+| `hopper.settings` | Musik, SFX, Ruckeln, Tag/Nacht, gewaehltes Level (`startCave`/`startLava`) |
+| `hopper.look` | getragene Form, Farbe, Kopfbedeckung |
+| `hopper.unlocked` | im Shop freigeschaltete Teile |
+| `hopper.coins` | Muenzstand |
+| `hopper.highscore` / `hopper.last` | Level 1 |
+| `hopper.cave.highscore` / `hopper.cave.last` | Level 2 |
+| `hopper.lava.highscore` / `hopper.lava.last` | Level 3 |
+| `hopper.caveUnlocked` / `hopper.lavaUnlocked` | Freischaltungen |
 
-**Phase 3 (Rendering + echte Steuerung)**: fertig - **das erste tatsaechlich
-spielbare Godot-Build**. `godot/scripts/game_view.gd` verbindet `hopper_sim.gd`
-erstmals mit echtem Rendering (`_draw()`, schlichte Formen/Farben statt
-Kunst - Grafik-Feinschliff ist Phase 4) und echter Eingabe (Tastatur:
-Leertaste/Hoch/W springen inkl. `JUMP_CUT`-Kurztipp-Verhalten, Runter/S
-ducken; Touch: oberes Drittel tippen = springen, unteres Drittel halten =
-ducken, analog zum Original). Wueste/Hoehle wechseln automatisch bei
-Erreichen von `CAVE_START` (vereinfacht: sofortiger Wechsel statt der
-Cutscene/Torbogen-Optik aus dem Original - das ist reine Optik, spaeter
-nachrollbar). `rockNoise()` (deterministische Ganzzahl-Hash-Funktion fuers
-Nicht-Schwimmen von Hoehlentexturen beim Scrollen) ist portiert, aber noch
-nicht fuer Detailtexturen verdrahtet - das kommt mit dem Grafik-Feinschliff
-in Phase 4.
-
-Zur Selbstverifikation (ich kann kein natives Fenster sehen): ein Kopflos-
-JA-aber-mit-echtem-Rendering-Trick - `godot --path <projekt> -s
-res://tests/screenshot_test.gd` (ohne `--headless`, das deaktiviert die
-GPU-Rendering-Pipeline komplett) laesst das Spiel ein paar hundert Frames
-laufen und speichert `get_viewport().get_texture().get_image()` als PNG.
-Damit direkt einen echten, kleinen Darstellungsfehler gefunden: die
-HUD-Schrift war in der Hoehle dunkel auf dunklem Himmel praktisch
-unsichtbar (fixed: heller Kontrastwert, wenn `cave_on`). Ausserdem verifiziert:
-`jump()`/`end_jump()` (neue, echte Spieler-Eingabe-API neben dem bisherigen
-internen Bot-Pfad) reproduzieren exakt die im JS-Original dokumentierten
-Sprunghoehen (voller Sprung ~120, kuerzester Tipp ~65 - Basiswert im
-JS-Kommentar: "kuerzester Tipp erreicht 65").
-
-**Nachtrag (echtes Geraet):** Ducken per Touch funktionierte auf dem
-Handy nicht. Ursache: `_handle_input()` rief JEDEN Physik-Frame
-bedingungslos `sim.set_ducking(false)`, sobald keine Taste gedrueckt war -
-das ueberschrieb den Touch-Zustand aus dem Touch-Event-Handler sofort
-wieder, weil `InputEventScreenTouch` nur einmal beim Druecken/Loslassen
-feuert, nicht laufend waehrend des Haltens (Event-basiert vs. Poll-basiert
-schrieben in dieselbe Variable). Fix: Touch setzt nur noch ein
-`touch_duck_held`-Flag, `_handle_input()` ist die EINZIGE Stelle, die
-`sim.ducking` setzt (als ODER aus Tastatur- und Touch-Zustand), einmal pro
-Frame. Lehre fuer kuenftigen Godot-Eingabecode hier: nie Event- und
-Poll-basierte Schreibzugriffe auf denselben gehaltenen Zustand mischen.
-
-**Phase 4 (HDR2D + Glow - der eigentliche Grund fuer den Umstieg)**: fertig.
-`_setup_environment()` in `game_view.gd` aktiviert `Environment.BG_CANVAS` +
-Glow (`viewport/hdr_2d=true` zusaetzlich in `project.godot` noetig, sonst
-wirkungslos). Gift-Geschoss und Kristall-Kaktus (Hoehle) bekommen HDR-Farben
-(Kanalwerte &gt; 1.0 - loesen den Bloom tatsaechlich aus) statt der bisherigen
-flachen Farben: `_draw_poison()` zeichnet einen weichen neongruenen
-Glow-Halo + Kometenschweif + hellen Kern, `_draw_crystal()` einen
-facettierten, blau leuchtenden Diamanten statt der flachen gruenen Box aus
-Phase 3. Per Screenshot-Trick verifiziert - beide zeigen einen klar
-sichtbaren, weichen Leucht-Halo um die Form. Zusaetzlich: ein echtes
-`GPUParticles2D` fuer Sprung-/Landestaub (statt selbst gemalter Partikel -
-lohnt sich hier, weil ein einzelner wiederverwendeter Knoten reicht, kein
-Verwaltungsaufwand pro Hindernis wie bei Gift/Kristall). Funktioniert,
-sichtbar aber noch klein/schlicht (6x6-Platzhaltertextur) - Feinschliff
-bei Bedarf spaeter.
-
-Bewusste Design-Entscheidung (siehe Recherche vor der Migration): Glow via
-HDR2D+WorldEnvironment statt eines SubViewport mit echter 3D-Szene - liefert
-denselben "leuchtet wirklich"-Eindruck bei deutlich weniger Aufwand/
-Verwaltung, ohne die 2D-Physik/Kollision anzufassen.
-
-**Phase 5 (Audio - 100% synthetisiert, keine Audiodatei)**: fertig.
-`scripts/audio_synth.gd` erzeugt Wellenformen (Sinus/Rechteck/Saegezahn/
-Dreieck mit exponentiellem Frequenz-Sweep, plus gefiltertes Rauschen per
-Biquad-Bandpass) als `AudioStreamWAV` im Speicher - wortgleiches Prinzip zu
-web/index.html (`tone()`/`noise()` ueber WebAudio), aber als einmal
-generierte Clips statt Echtzeit-Oszillatoren. `scripts/sfx.gd` (Autoload
-"Sfx") haelt alle 8 Sounds aus dem Original (jump/land/duck/point/die/ui/
-equip/enter, gleiche Frequenzen/Dauer/Lautstaerken) plus den
-Hoehlen-Echo-Effekt (`withCaveEcho()`-Aequivalent: zweites, leiseres
-Abspielen 110ms spaeter, nur wenn `cave_on`). `scripts/music.gd` ist ein
-einfacher Sequencer (126bpm, 4 Akkorde + Bass + Hi-Hat) - bewusst NICHT
-notengetreu zum Original (die exakte Notenfolge liess sich aus dem
-archivierten Kommentar nicht rekonstruieren, nur der Stil), rein kosmetisch
-also unkritisch. `game_view.gd` loest die Sounds ueber Flankenerkennung aus
-(Sprung/Landung ueber `on_ground`-Wechsel, Ducken nur auf der steigenden
-Flanke, Punkte-Sound bei jeder vollen 100er-Schwelle, Musik nur bei echter
-Steuerung wie im Original - nicht im Bot-/Testmodus).
-
-**Neue Testmodus-Falle gefunden**: Autoloads (hier "Sfx") werden im
-`-s script.gd`-Kopflosmodus NICHT initialisiert - anders als beim normalen
-Start ueber `run/main_scene`. Ein Testskript, das `game_view.gd` direkt
-instanziiert, bekommt einen COMPILE-Fehler ("Identifier not found: Sfx"),
-nicht nur einen leeren Autoload. Verifiziert wurde das echte Bootstrapping
-deshalb mit `godot --path <projekt> --quit-after 200` (kein `-s`, laedt
-main.tscn ganz normal inkl. Autoloads) - lief fehlerfrei durch. Fuer
-kuenftige Phasen mit Autoload-Abhaengigkeiten (z.B. Menues in Phase 6)
-denselben `--quit-after`-Trick statt `-s` verwenden, sobald Autoloads
-gebraucht werden.
-
-Da ich selbst nichts hoeren kann: die Sounds sind per Code-Review + einer
-Bytegroessen-/Fehlerfreiheits-Pruefung verifiziert (korrekte Sample-Anzahl,
-kein Absturz beim echten Abspielen), nicht per Gehoer. Rueckmeldung vom
-User noetig, ob sich das auf dem Geraet gut anhoert.
-
-**Phase 6 (Garderobe/Menues/Persistenz/Attract-Modus-UI)**: fertig.
-Neue Schicht `scripts/app.gd` (Screen-/Menue-Zustandsmaschine: menu/
-wardrobe/settings/paused/over/game), sitzt strikt ueber `game_view.gd`
-(das nichts von Bildschirmen/Menues weiss) und steuert es nur ueber dessen
-oeffentliche API/Signale. `scripts/save_data.gd` (Autoload "Save")
-persistiert Highscores (Wueste/Hoehle getrennt), Einstellungen (Musik/SFX/
-Shake/Tageszyklus/Start-in-Hoehle) und Garderobe (Form/Farbe/Hut) als JSON
-unter `user://save.json`. **Bewusste Produktentscheidung**: keine Migration
-alter WebView-`localStorage`-Spielstaende - anderes Paket, andere Speicher-
-form, fuer ein paar Ganzzahlen nicht lohnend (User-Entscheidung, nicht
-stillschweigend festgelegt).
-
-Dabei einen echten Modellierungsfehler aus Phase 3 korrigiert: die Wueste
-ging bisher nahtlos/automatisch in die Hoehle ueber (`cave_on` wurde einfach
-bei Erreichen von `CAVE_START` umgeflippt). Im JS-Original endet die Wueste
-dort stattdessen distinkt ("Level geschafft", `completeLevel()`), und die
-Hoehle ist ein SEPARATER Lauf mit zurueckgesetztem Tempo/Score. Jetzt hat
-`hopper_sim.gd` ein `cleared`-Feld (analog zu `dead`, `step()` haelt darauf
-an), `game_view.gd` sendet ein `cleared`-Signal, `app.gd` zeigt einen
-eigenen "Level geschafft"-Bildschirm (statt Game Over) und schaltet die
-Hoehle frei (`Save.unlock_cave()`).
-
-Zwei echte Bugs beim Schreiben gefunden und behoben (nicht erst beim
-Testen): (1) `LOOK_COLORS["auto"]` ist absichtlich `null` - eine direkte
-Zuweisung in eine `Color`-typisierte Variable haette bei "auto"-Farbe zum
-Absturz gefuehrt, gefixt durch einen Zwischenschritt mit expliziter
-Null-Pruefung. (2) `_show()` setzte `frozen` anfangs unbedingt auf `false`,
-was den laufenden Lauf faelschlich entpausiert haette, sobald man aus den
-Einstellungen zurueck zur Pause navigiert - jetzt `frozen = (name ==
-"paused")`.
-
-Verifiziert: Regressions-Soak (1800s Wueste, 900s Hoehle) bestaetigt, dass
-der neue `cleared`-Mechanismus die Fairness nicht veraendert (28
-"geschafft"-Ereignisse + nur 3 Tode in der Wueste, 0 Tode in der Hoehle -
-im Rahmen der bisherigen Werte). Echter Bootstrap-Lauf
-(`godot --path godot --quit-after 200`, keine Autoload-Compile-Fehler) und
-eine visuelle Pruefung aller 6 Bildschirme per Screenshot-Trick (Menue,
-Garderobe, Einstellungen, laufendes Spiel, Pause, Game Over/"geschafft")
-zeigen korrektes Layout, lesbaren Text und richtige dynamische Inhalte
-(Sperrzustand des Hoehlen-Buttons, "Neuer Rekord!"-Anzeige, Button-Text-
-Wechsel je nach Kontext).
-
-**Phase 7 (finaler Soak-Test + echte Paket-ID-Umstellung + erster echter
-Release)**: fertig. Finaler Regressions-Soak vor der Umstellung: je 3600s
-Wueste UND Hoehle, drei Seeds (1/2/3) - Wueste 7-11 Tode/3600s (deutlich
-unter der historisch akzeptierten Rate), Hoehle 0 Tode/3600s bei allen
-Seeds, "geschafft"-Mechanik feuert stabil (52-55x/Lauf) ohne die Fairness
-zu beeinflussen, Reaktionsfenster/Hoehen-Clearance unveraendert gegenueber
-allen frueheren Phasen - keine Regression durch Phase 6.
-
-**Paket-ID-Umstellung**: `com.daniel.hopper.godot` -> `com.daniel.hopper`
-(dieselbe ID wie die aktuell shippende WebView-App), Label
-"HopperBootstrap" -> "Hopper", Version 0.6(7) -> 2.0(34) - bewusst ueber
-der WebView-Versionscode 33, damit eine Installation als Update ueber die
-bestehende App funktioniert statt als Downgrade abgelehnt zu werden.
-Verifiziert per `apksigner verify --print-certs`: identisches
-Signatur-Zertifikat (SHA-256-Fingerabdruck) wie die WebView-APK, da
-beide denselben geteilten `apk-builder`-Release-Keystore nutzen -
-**diese Godot-APK installiert sich auf einem Geraet mit der bestehenden
-Hopper-App als direktes Update, nicht parallel** (siehe Warnhinweis beim
-Ausliefern).
-
-**App-Icon nachgezogen** (explizite Nutzer-Entscheidung: jetzt statt
-spaeter): Godots Android-Export ohne Custom-Gradle-Build akzeptiert nur
-Raster-PNGs fuer `launcher_icons/*`, kein Vector-Drawable-XML wie beim
-WebView-Build. Das bestehende `hopper/icon.xml` (Android Vector Drawable)
-wurde 1:1 als SVG uebertragen (Android-`pathData` und SVG-Pfadsyntax sind
-kompatibel, reine Attribut-Umbenennung) und per einmaligem Dev-Skript
-(`godot/tests/render_icon.gd`, nutzt `Image.load_svg_from_string()` -
-reine CPU-Rasterung, funktioniert auch `--headless`) zu den drei von Godot
-geforderten PNGs gerendert (Vordergrund/Hintergrund fuer das adaptive
-Icon, plus ein zusammengesetztes Legacy-Icon). Verifiziert durch
-Entpacken der fertig gebauten APK und Sichtpruefung des tatsaechlich
-gepackten Icons (nicht nur der Quelldateien) - zeigt korrekt die
-Laeufer-Silhouette auf orangem Grund, kein Godot-Standard-Icon mehr.
-`export_filter`/`exclude_filter` in `export_presets.cfg` zusaetzlich
-verschaerft, damit `tests/` (Dev-/Soak-Skripte) und die SVG-Icon-Quelle
-nicht mehr mit in die shippende APK gepackt werden.
+"Bestwerte zuruecksetzen" in den Einstellungen setzt alle sechs
+Highscore-/Last-Keys zurueck, nicht aber Muenzen oder Freischaltungen.
 
 ## Bauen
 
@@ -301,6 +86,9 @@ zusaetzlich als Web-Asset in die APK.
 | Ducken | unteres Drittel halten | Pfeil runter |
 | Pause | Knopf oben links | Esc oder P |
 
+Verlaesst man die App waehrend eines Laufs (Home-Taste, Anruf), pausiert er
+automatisch (`visibilitychange`).
+
 ## Physik
 
 Die Werte stehen als Konstanten oben in `web/index.html`. Zwei davon sind
@@ -318,6 +106,12 @@ nicht frei waehlbar, sondern erprobt:
 Aufsteigen und Fallen nutzen unterschiedliche Schwerkraft (`GRAV_UP` /
 `GRAV_DOWN`); symmetrische Schwerkraft fuehlt sich schwammig an.
 
+Hindernis-Groessen und -Hoehen (Stalaktit-/Saeulenspitzen, Schlangenbreite,
+Felsdurchmesser, Fledermaus-Hoehenstufen) sind aus `hits()` und der
+Sprungphysik hergeleitet und per Autopilot-Soak verifiziert - die Grenzwerte
+stehen jeweils im Kommentar an der Konstante. Tempo oder Dichte nie
+aendern, ohne erneut zu messen (siehe CLAUDE.md, "Fairness").
+
 ## Ton
 
 Sound und Musik werden zur Laufzeit mit der Web Audio API synthetisiert -
@@ -327,7 +121,8 @@ zur fehlenden INTERNET-Berechtigung und hat kein Lizenzproblem.
 Die Musik ist ein kleiner Sequencer mit Vorausplanung: Noten werden anhand
 der Audio-Uhr (`AC.currentTime`) 140 ms im Voraus gelegt, weil `setInterval`
 allein fuer Timing zu ungenau ist. Vier Akkorde in A-Moll-Pentatonik, dazu
-Bass, Kick, Hi-Hat und ein Arpeggio.
+Bass, Kick, Hi-Hat und ein Arpeggio. In der Hoehle bekommen Sprung, Landung
+und Tod ein leises Echo (`withCaveEcho`).
 
 Browser starten Audio erst nach einer Nutzergeste - `audioInit()` haengt
 deshalb an der ersten Beruehrung und an jedem Menueknopf.
@@ -341,19 +136,32 @@ Die Oberflaeche wandert mit derselben Zahl (`night`) mit wie die Spielwelt.
 Wichtig dabei: **jeder** Wert wird interpoliert, Deckkraft eingeschlossen
 (`UI_DAY` / `UI_NIGHT` plus `mixRgba`). Eine frueher benutzte Schwelle
 (`t > 0.5 ? dunkel : hell`) liess Panel, Rahmen und Knoepfe mitten im
-1,8 Sekunden langen Uebergang hart umschlagen, waehrend der Hintergrund
-schon halb gewechselt war.
+Uebergang hart umschlagen. In der Hoehle ist es immer Nacht.
 
 `applyTheme` schreibt die CSS-Variablen nur bei einer Aenderung ueber
 0,02 - sonst laeuft waehrend des Uebergangs 60-mal je Sekunde ein
 Style-Recalc ueber das ganze Dokument.
 
+### Liquid-Glass
+
+Panel, Eckknoepfe, Schalter und Kacheln sind durchscheinendes Material:
+`backdrop-filter: blur(26px) saturate(185%)`, eine helle Lichtkante oben
+(inset box-shadow) und ein diagonaler Glanzstreifen (`::after`,
+`mix-blend-mode: overlay`, `pointer-events: none`). Nur `.panel` traegt den
+vollen Blur - ein zweiter Blur-Layer ueber dem 60fps-Canvas waere spuerbar
+teuer. Die Glas-Fuellung braucht nachts eine eigene, dunklere Farbe (ein
+heller Schleier ergab ueber dem Nachthimmel nur ~2:1 Kontrast), deshalb
+tragen `UI_DAY`/`UI_NIGHT` auch `glassFill`/`glassBtn`/`glassSoft`/`rimTop`/
+`rimBot`/`sheen`. `@supports not (backdrop-filter: blur(1px))` faellt auf
+einen blickdichten `--solidPanel` zurueck, der ebenfalls Tag/Nacht folgt.
+
 ## Garderobe
 
-Acht Farben und fuenf Kopfbedeckungen, gesichert in `localStorage`. Die
-Farbe `auto` folgt dem Tag- und Nachtthema; die sieben festen Farben haben
-bewusst mittlere Helligkeit, damit sie auf hellem **und** dunklem Grund
-lesbar bleiben.
+Drei Formen (Hund, Katze, Hase - nur Ohren und Schwanz unterscheiden sich),
+acht Farben und fuenf Kopfbedeckungen. Die Farbe `auto` folgt dem Tag- und
+Nachtthema; die sieben festen Farben haben bewusst mittlere Helligkeit, damit
+sie auf hellem **und** dunklem Grund lesbar bleiben. Gesperrte Teile sind
+gedimmt und tragen ein Schloss.
 
 Die Figur wird von genau einer Funktion gemalt (`paintRunner`), die ihren
 Zielkontext als Argument bekommt - einmal ins Spielfeld, einmal in die
@@ -361,39 +169,45 @@ kleine Vorschau der Garderobe. Deshalb sitzen Muetzen in beiden Ansichten
 gleich. Die Zeichenhelfer nutzen dafuer die Variable `G` als aktuellen
 Kontext; wer eine neue Form ergaenzt, sollte `G` benutzen und nicht `ctx`.
 
-Dahinter laeuft das Spiel im Vorfuehrmodus weiter. Der Autopilot in
+## Vorfuehrmodus
+
+Hinter dem Menue laeuft das Spiel mit Autopilot weiter (`state.attract`).
+Der Vorfuehrmodus darf nichts Dauerhaftes veraendern (keine Muenzen, keine
+Bestwerte, keine Freischaltungen) und keine Spiel-Sounds abspielen.
 `autoPilot()` hat zwei Eigenheiten, die nicht wegoptimiert werden sollten:
 
 - Ein Hindernis bleibt relevant, bis es die Figur **ganz** passiert hat.
   Ein Abbruch nach der Vorderkante liess die Figur sich mitten im 38
-  Einheiten breiten Vogel wieder aufrichten - das war die Ursache von 21
-  der 30 Zusammenstoesse in vier Minuten.
+  Einheiten breiten Vogel wieder aufrichten.
 - Der Absprungzeitpunkt haengt von Hindernisbreite und Tempo ab, nicht von
   einem festen Abstand. Bei einer Dreiergruppe reicht die Luftzeit sonst
   nicht bis zur Hinterkante.
 
-Gemessen: 15 Minuten bis Hoechsttempo, 896 Spruenge, 0 Zusammenstoesse.
+Der Autopilot ist zugleich das Messwerkzeug fuer Fairness-Soaks (siehe
+CLAUDE.md).
+
+## Zurueck-Taste
 
 Die Android-Zurueck-Taste fuehrt ins Menue statt die App zu beenden. Dafuer
 legt `pushAway()` einen `history.pushState` an - die WebView-Activity ruft
 dann `goBack()`, was `popstate` ausloest. Es gibt hoechstens EINEN solchen
 Eintrag (Spiel, Garderobe, Shop, Einstellungen teilen ihn), und die
 In-App-Zurueck-Knoepfe bauen ihn ueber `leaveToMenu()` -> `history.back()`
-wieder ab. Vorher pushte jedes Spielen/"Nochmal" einen neuen Eintrag, der nie
-entfernt wurde (im Menue musste man danach mehrfach Zurueck druecken, bis die
-App schloss), waehrend Garderobe/Shop/Einstellungen gar keinen hatten (dort
-beendete Zurueck die App). Einstellungen aus der Pause heraus: Zurueck fuehrt
-wieder in die Pause.
+wieder ab. Einstellungen aus der Pause heraus: Zurueck fuehrt wieder in die
+Pause.
 
-## Staffelung der Bedienelemente
+Offen: Die Zurueck-**Wischgeste** (Predictive Back, targetSdk 36) umgeht
+`onKeyDown` und schliesst die App direkt. Der Fix aus breathe-well/ice-breath
+braucht einen eigenen `build.ps1`-Wrapper, den Hopper nicht hat (siehe
+`apk-builder/CLAUDE.md`, "Bekannte Stolperstellen").
 
-`.overlay` deckt mit `inset: 0` den ganzen Bildschirm ab und steht im DOM
-hinter den Eckknoepfen. Ohne `z-index` (Overlay 10, Knoepfe 20) faengt es
-deren Klicks ab - das Zahnrad war dadurch sichtbar, aber tot.
+## Stolperfallen im Menue-Code
 
-Wer hier etwas ergaenzt, sollte den Klickweg pruefen und nicht nur den
-Handler aufrufen. `document.elementFromPoint` auf die Mitte des Elements
-zeigt, was dort tatsaechlich liegt:
+**Staffelung der Bedienelemente.** `.overlay` deckt mit `inset: 0` den ganzen
+Bildschirm ab und steht im DOM hinter den Eckknoepfen. Ohne `z-index`
+(Overlay 10, Knoepfe 20) faengt es deren Klicks ab - das Zahnrad war dadurch
+sichtbar, aber tot. Wer hier etwas ergaenzt, sollte den Klickweg pruefen und
+nicht nur den Handler aufrufen:
 
 ```js
 var r = el.getBoundingClientRect();
@@ -401,15 +215,10 @@ var hit = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
 // hit muss el oder ein Kind davon sein
 ```
 
-Ein Test, der `openSettings()` direkt aufruft, laeuft an genau diesem
-Fehler vorbei.
-
-## Scrollen in den Menues
-
-`touch-action` eines Elternelements **beschraenkt alle Nachkommen**. Solange
-`body` auf `touch-action: none` stand, liess sich ein Menue auch mit eigenem
-`pan-y` nicht scrollen - die Ausnahme im Kind hilft nicht gegen die Sperre im
-Eltern. Die Sperre gehoert deshalb auf `canvas#c`, nicht auf `body`:
+**Scrollen in den Menues.** `touch-action` eines Elternelements
+**beschraenkt alle Nachkommen**. Solange `body` auf `touch-action: none`
+stand, liess sich ein Menue auch mit eigenem `pan-y` nicht scrollen. Die
+Sperre gehoert deshalb auf `canvas#c`, nicht auf `body`:
 
 ```css
 html, body { overscroll-behavior: none; }      /* kein Ueberziehen */
@@ -419,1068 +228,15 @@ canvas#c   { touch-action: none; }             /* Spielgesten abfangen */
 
 Am Desktop faellt das nicht auf, weil dort mit dem Mausrad gescrollt wird.
 
-## Was in den Einstellungen anhaelt
-
-Nur ein echtes Spiel wird eingefroren. In der Lobby laeuft der Vorfuehrmodus
-weiter, auch waehrend die Einstellungen offen sind - sonst steht die Szene
-dahinter ploetzlich still, was wie ein Absturz aussieht:
+**Was in den Einstellungen anhaelt.** Nur ein echtes Spiel wird eingefroren.
+In der Lobby laeuft der Vorfuehrmodus weiter, auch waehrend die
+Einstellungen offen sind - sonst steht die Szene dahinter ploetzlich still,
+was wie ein Absturz aussieht:
 
 ```js
 var frozen = !state.attract && (screen === "paused" || screen === "settings");
 ```
 
-## Dunkler Modus des Systems
-
-Die App faerbt sich selbst und laesst sich vom System nicht umfaerben; das
-Template von `apk-builder` schaltet dafuer "Force Dark" ab. Der Tag- und
-Nachtwechsel im Spiel ist davon unabhaengig. Wer stattdessen dem Systemmodus
-folgen will, kann `matchMedia("(prefers-color-scheme: dark)")` auswerten und
-`night` beim Start entsprechend setzen.
-
-## Liquid-Glass-Menue
-
-Panel, Eckknoepfe, Schalter und Kacheln sind durchscheinendes Material statt
-flacher Farbflaechen: `backdrop-filter: blur(26px) saturate(185%)`, dazu eine
-helle Lichtkante oben (inset box-shadow), ein diagonaler Glanzstreifen
-(`::after`, `mix-blend-mode: overlay`, `pointer-events: none`) und Knoepfe,
-die auf demselben Prinzip aufbauen. Nur `.panel` traegt den vollen Blur - die
-Eckknoepfe liegen bereits auf unscharfem Grund und sparen sich den eigenen
-`backdrop-filter`, das waere bei einem 60fps-Canvas darunter ein zweiter,
-spuerbar teurer Blur-Layer fuer kaum sichtbaren Zusatznutzen.
-
-**Ein Fehlversuch unterwegs:** Die Glas-Fuellung (`--glassFill` etc.) sollte
-zuerst themenunabhaengig bleiben, nach dem Gedanken "backdrop-filter zieht die
-Farbe schon automatisch aus der Szene dahinter". Rechnerisch gepruefte, dann
-verworfene Idee: derselbe halbtransparente Weissschleier ergab ueber dem sehr
-dunklen Nachthimmel nur ein mittleres Grau (Panel-Luminanz ~0.42), und mit dem
-hellen Nacht-Text blieb der Kontrast bei ~2,0:1 - unter brauchbaren 3:1. Die
-Fuellung braucht bei Nacht also doch eine eigene, dunklere Farbe (weiterhin
-durchscheinend, nur ein dunkler statt heller Schleier): `UI_DAY`/`UI_NIGHT`
-tragen jetzt `glassFill`/`glassBtn`/`glassSoft`/`rimTop`/`rimBot`/`sheen`
-zusaetzlich zu den bisherigen Werten. Nachkontrast damit rechnerisch ~7,9:1.
-
-`@supports not (backdrop-filter: blur(1px))` faellt auf einen blickdichten
-`--solidPanel` zurueck, der ebenfalls Tag/Nacht folgt - sonst waere der Text
-in Browsern ohne Blur-Unterstuetzung bei Nacht unlesbar auf hellem Grund.
-
-## Drei Lauffiguren
-
-`look.shape` (`dog` / `cat` / `bunny`) waehlt eine von drei Silhouetten in
-der Garderobe. Rumpf, Beine und Laufzyklus bleiben fuer alle drei identisch
-(`LEGS`-Array, Koerper-Rechtecke) - nur Ohren und Schwanz unterscheiden sich,
-gezeichnet von zwei eigenstaendigen Funktionen `drawEars`/`drawTail`, die
-denselben Kopf- bzw. Ruecken-Referenzpunkt bekommen, den der Hund schon immer
-benutzt hat. Dadurch passt jede Form ohne Sonderfaelle in beide Posen.
-
-Zwei Luecken kamen als Feedback zurueck, nachdem die erste Fassung nur in
-der stehenden Pose Ohren zeichnete:
-
-- **Ohren fehlten komplett, sobald geduckt wurde** - das war schon beim
-  urspruenglichen (einzigen) Hund so, nicht neu durch die drei Formen. Die
-  Duck-Pose zeichnet jetzt fuer alle drei Formen auch Ohren.
-- **Ohren/Schwanz reagierten auf nichts** - sie hatten nur den Zwei-Pixel-
-  Bob aus dem Laufzyklus. Jetzt tragen sie zusaetzlich einen kleinen Ausschlag
-  proportional zu `o.vy` (`Math.max(-3, Math.min(3, o.vy / 260))`), demselben
-  Wert, der oben schon fuer Stauchen/Strecken benutzt wird - kein neuer
-  Zustand, nur derselbe Wert an einer weiteren Stelle verwendet. Gilt auch
-  fuer Ducken in der Luft (Schnellfall), das ist in diesem Spiel moeglich.
-
-## Katzen-Redesign
-
-Die erste Fassung der Katzenohren hatte Basis und Spitze vertauscht: das
-breite Ende zeigte nach oben, die Spitze nach unten zum Kopf - ein
-umgedrehtes Dreieck statt spitzer Ohren. `tri()` nimmt drei Punkte ohne
-eingebaute Vorstellung von "oben"/"unten", der Fehler fiel deshalb erst beim
-Hinsehen auf, nicht beim Pixel-Signatur-Test (der nur "zeichnet ohne Fehler"
-und "unterscheidet sich von den anderen Formen" pruefte, nicht "sieht richtig
-aus"). Jetzt liegt die breite Basis am Kopf, die Spitze zeigt weg davon.
-Der Schwanz bekam denselben Blick: die Kruemmung am Ende sitzt jetzt sichtbar
-versetzt ueber der Linie statt mittig draufgesetzt, damit sie wie eine
-Kruemmung aussieht statt wie eine Beule.
-
-## Zwei weitere Hindernisse: Felsen und Schlange
-
-Spawn-Gewichtung: 16% Felsen, 16% Schlange, Rest Kaktus/Vogel wie bisher.
-Kollision und Autopilot brauchten keine Aenderung - `hits()` ist eine
-generische AABB-Pruefung gegen `x/y/w/h`, und `autoPilot()` behandelt jedes
-Bodenhindernis, das nicht `kind === "bird"` ist, bereits gleich (Sprung,
-Breiten- und tempoabhaengig ausgeloest). Neu waren nur `spawnObstacle()`
-(zwei weitere Zweige), `drawRock`/`drawSnake` und die Dispatch-Zeile in
-`render()`.
-
-**Groessen sind vermessen, nicht geschaetzt** - dieselbe Methode wie bei
-`JUMP_CUT_MIN`: der Autopilot ueberstand beide neuen Typen ohne einen
-einzigen Abstuerze, aber er springt nie kurz ab (`doJump(true)` ohne
-`endJump()`), das haette eine zu hohe/breite Kollisionsbox nie aufgedeckt.
-Direkt gemessen, welche Groesse der kuerzeste Tipp (16ms) noch raeumt:
-
-| | raeumt bis | trifft ab | Spawn-Bereich |
-|---|---|---|---|
-| Felsenhoehe | 54 | 56 | 40-52 |
-| Schlangenbreite | 55 | 58 | 42-52 |
-
-Wer diese Werte aendert, sollte mit derselben Methode nachmessen - ein
-Hindernis natuerlich scrollen lassen (`obstacles.push(...)` einmal, dann
-mehrfach `update(1/60)`, kein `x` pro Frame neu setzen), nicht die
-Sprung-Scheitelhoehe mit der Hindernishoehe vergleichen. Ein erster Versuch
-dazu hat genau diesen Fehler gemacht und faelschlich "trifft" gemeldet, wo
-tatsaechlich "raeumt" galt.
-
-## Rollender Fels und Bergkette
-
-Der Fels ist jetzt ein Kreis (Bounding-Box weiterhin die Kollisionsbox) mit
-zwei halbtransparenten Facetten, die sich mit ihm drehen (`o.rot`, aus
-zurueckgelegter Strecke berechnet: `rot += bewegung / radius` - ein reiner
-Kreis ohne Facette stuende beim Rollen optisch still).
-
-Zusaetzlich zum normalen Weltscroll bekommt jeder Fels ein eigenes, mit der
-Rollzeit wachsendes Extratempo (`ROLL_ACCEL`, gedeckelt durch
-`MAX_ROLL_BONUS`) - er wird schneller, je laenger er unterwegs ist. Die
-Bergkette (`drawMountains`) ist eine eigene, noch langsamere Parallaxe
-(`scrollPeaks`) hinter den Duenen, mit spitzeren Gipfeln statt der weichen
-Duenenkurve. Sie ist reine Kulisse - der Fels spawnt weiterhin am normalen
-Hindernis-Spawnpunkt, es gibt keine animierte Bahn von einem Berggipfel
-herunter in die Spur.
-
-**Der Rollbonus veraendert die sichere Kollisionsgrenze**, deshalb war die
-alte Vermessung (Blockform, keine Beschleunigung) hinfaellig und musste neu
-gemacht werden - diesmal mit dem *realistischen* Rollbonus, den ein Fels
-schon hat, wenn er in Spielernaehe ankommt (er startet an der echten
-Spawnkante, nicht direkt neben der Figur). Kuerzester Tipp raeumt bis
-Durchmesser 52, ab 56 trifft es; Spawn-Bereich 34-46 haelt Abstand.
-
-Ein erster Messversuch ohne realistischen Rollbonus (rollT=0 direkt neben
-der Figur) meldete faelschlich schon "trifft" bei Werten, die in der
-echten Anfahrt sicher waren - weil ein Fels, der schon eine Weile rollt,
-bis zur Naehe des Spielers bereits Bonus-Tempo aufgebaut hat und dadurch
-zufaellig fast exakt im Sprungscheitel ankommt (per Trajektorien-Log
-bestaetigt: Kollisionszone und Sprunghoehepunkt trafen bei t~0.22s
-zusammen), nicht spaeter und ungeschuetzter wie beim Start-bei-0-Test.
-
-## Bergabschnitte: selten, dann exklusiv Felsen
-
-Vorher waren die Berge Dauerkulisse und Felsen einer von vier moeglichen
-Hindernissen (16%). Jetzt sind Bergabschnitte ein seltenes Ereignis
-(`state.mountainOn`, geplant per Score-Schwelle wie der Tag/Nachtwechsel,
-Abstand 500-900 Punkte): waehrend eines Abschnitts spawnen **ausschliesslich**
-Felsen, in drei Varianten (rund/glatt, kantig, rissig) und breiterer
-Groessenstreuung (26-48 statt vorher 34-46). Ausserhalb eines Abschnitts
-spawnt gar kein Felsen mehr. Die Bergkette blendet weich mit dem Abschnitt
-ein/aus (`state.mountainVis`, unabhaengig von `running` aktualisiert, damit
-sie nicht mitten im Uebergang einfriert, wenn die Figur waehrenddessen
-stirbt).
-
-**"Viele Felsen" kommt ueber die Dauer des Abschnitts (12s), nicht ueber
-gefaehrlich engen Abstand.** Der erste Versuch (halber Normalabstand)
-erzeugte in 10 Minuten 135 Autopilot-Abstuerze - zwei Felsen standen dann
-teils naeher, als eine einzelne Sprungbahn Platz hat. Gesweept bis ein
-sicherer Wert gefunden war: 0.70x Normalabstand (statt 0.60x ausserhalb)
-haelt sich bei etwa 1 Absturz pro 10 Minuten, ueber die 12 Sekunden Dauer
-kommen trotzdem bis zu 14 Felsen in einem Abschnitt zusammen.
-
-Ein zweiter, unabhaengiger Fund dabei: `autoPilot()` berechnete Sprung-
-Zeitpunkte bisher nur aus `state.speed`, ohne den Rollbonus eines Felsens
-(`o.rollExtra`) einzurechnen. Bei einzelnen Felsen zwischen anderen
-Hindernissen fiel das kaum auf; sobald **jedes** Hindernis in Folge ein
-beschleunigender Fels war, summierte sich der systematische Timing-Fehler
-zu wiederholten Abstuerzen. Behoben, indem die Trigger-Formel die
-tatsaechliche Schliessgeschwindigkeit (`state.speed + rollExtra`) benutzt
-statt nur `state.speed`.
-
-**Ehrlich bleibt ein kleiner Rest:** Auch mit beiden Korrekturen zeigt ein
-20-Minuten-Autopilotlauf noch vereinzelte Abstuerze (rund 1 pro 7
-Abschnitte, ausschliesslich an Felsen) - vermutlich Restfaelle, in denen
-der Autopilot (der immer nur das naechstgelegene Hindernis betrachtet,
-siehe autoPilot()-Kommentar) durch Zufallsstreuung in der Taktung doch
-zwei zu nah stehende Felsen erwischt. Das betrifft nur die Vorfuehrmodus-
-Kulisse im Menue, nicht echte Spielsicherheit - die Kollisionsgrenze pro
-Fels ist unabhaengig davon direkt vermessen (siehe oben). Weiter zu
-verbessern waere ein zweites Hindernis in die Trigger-Berechnung
-einzubeziehen statt nur das naechste; aktuell nicht umgesetzt.
-
-## Schwierigkeit steigt schrittweise: erst Kaktus, dann Vogel, dann Schlange
-
-Vorher waren Schlange (ab Score 0, 20%) und Vogel (ab Score 320, dann
-sofort 24%) mit festen Schwellen gesetzt - Vogel sprang in einem Frame
-von 0% auf 24%. Jetzt gibt es eine lineare Rampe (`rampChance()`): bis
-`BIRD_START` (120) ausschliesslich Kaktus, danach waechst die Vogelquote
-ueber `BIRD_RAMP` (280 Punkte) linear von 0 auf `BIRD_TARGET` (22%).
-Schlange folgt genauso ab `SNAKE_START` (380, also nachdem der Vogel
-schon eine Weile dabei ist) ueber `SNAKE_RAMP` (320) bis `SNAKE_TARGET`
-(20%). Rock/Bergabschnitte sind davon unberuehrt - eigenes, exklusives
-Ereignis-System (siehe oben).
-
-Verifiziert per Stichprobe (`spawnObstacle()` viele Male bei fest
-gesetztem `state.score` aufgerufen, ohne echte Zeit vergehen zu lassen):
-bei Score 0 ausschliesslich Kaktus, Vogelanteil in der Rampenmitte nahe
-der halben Zielquote, Schlange bleibt vor `SNAKE_START` bei 0, beide
-Anteile erreichen spaeter ihre Zielquote, Vogelanteil waechst monoton
-mit dem Score.
-
-## Bergabschnitte seltener + Abstand waechst mit dem Tempo
-
-Erster Abschnitt jetzt erst bei Score 700-900 statt 260. Wichtiger als der
-Start: der Punkte-Abstand zwischen Abschnitten ist nicht mehr fest
-(500-900), sondern skaliert mit `state.speed / SPEED_START` und zusaetzlich
-mit einem von `state.score` abhaengigen Wachstumsfaktor (`nextMountainGap()`).
-
-Der Grund ist nicht nur Geschmack: Score waechst proportional zum Tempo
-(`score = distance/14`, `distance += speed*dt`), und das Tempo steigt uebers
-Spiel von 330 auf 960. Ein **fester** Punkte-Abstand haette also spaeter im
-Spiel, wo pro Sekunde mehr Punkte anfallen, einen **kuerzeren** Realzeit-
-Abstand ergeben - Bergabschnitte waeren dann gegen Ende fast durchgehend
-gekommen, ohne dass sich am Punkte-Abstand selbst etwas geaendert haette.
-Der `speedFactor` gleicht das aus, `growth` macht den Realzeit-Abstand
-zusaetzlich noch groesser statt nur konstant zu halten.
-
-Gemessen statt angenommen: 28 Minuten Autopilot-Soak, Realzeit-Abstand
-zwischen 22 aufgezeichneten Abschnitten protokolliert. Ergebnis 47.7s bis
-94.7s, im Schnitt von ~74s (fruehe Haelfte) auf ~78s (spaete Haelfte)
-wachsend - keine Verkuerzung, kein "nur noch Berge" am Ende.
-
-## Zweite Stufe: die Hoehle (ab Score 2000, dauerhaft)
-
-Anders als die Bergabschnitte kein wiederkehrendes Ereignis, sondern ein
-dauerhafter Zustandswechsel (`state.caveOn`), der ab `CAVE_START` (2000)
-einmal umschaltet und nie zurueck. Eine Deckenflaeche (`ceilingGapAt()`,
-eine durchgehende Sinuswelle statt Segmenten wie die Duenen) schraenkt die
-Sprunghoehe streckenweise ein; Stalaktiten haengen als eigener
-Hindernis-Typ mit echter Kollision zusaetzlich herab. Ab Score 2000 werden
-keine neuen Bergabschnitte mehr angesetzt (rollende Felsen von fernen
-Gipfeln passen nicht mehr ins Bild einer Hoehle) - ein bereits laufender
-Abschnitt endet aber ganz normal.
-
-**Die Grenzwerte sind aus der Kollisionsgeometrie abgeleitet, nicht
-geraten.** `hits()` misst die Kopfhoehe eines Sprungs nicht an `runner.y`
-allein, sondern an `rh - runner.y` (rh = Koerperhoehe: 47 stehend, 30
-geduckt) - ein erster Rechenansatz uebersah dieses `rh` und haette die
-Decke faelschlich viel zu niedrig gesetzt. Real gemessene Kopfhoehen:
-
-| Zustand | Kopfhoehe ueber Boden |
-|---|---|
-| Stehen/Ducken (kein Sprung) | 30-47 |
-| Kuerzester Tipp-Sprung | ~112 |
-| Voll gehaltener Sprung | ~169 |
-
-`CAVE_MIN_GAP` (136) liegt bewusst zwischen 112 und 169: ein kurzer Tipp
-bleibt an jeder Stelle sicher (Bodenhindernisse bleiben ueberspringbar),
-ein voller Sprung nicht mehr. `CAVE_MAX_GAP` (210) liegt ueber 169 - offene
-Abschnitte schraenken also gar nichts ein. Stalaktiten-Spitzen (65-105)
-liegen unter 112: im Stehen/Ducken immer sicher, jeder Sprung trifft sie -
-eine reine "hier nicht springen"-Zone.
-
-**Der Autopilot haette die Hoehle unspielbar gemacht.** Er haelt Spruenge
-immer voll durch (`doJump(true)` ohne `endJump()`) - Kopfhoehe ~169, ueber
-`CAVE_MIN_GAP`. Erster Soak-Test: 2583 Abstuerze in 8 Minuten,
-ausschliesslich an der Decke. Da ein kurzer Tipp Bodenhindernisse ebenso
-sicher raeumt und unter jeder Deckenhoehe bleibt, tippt der Autopilot
-jetzt in der Hoehle immer kurz statt die Deckenhoehe erst vorherzusagen
-(`runner.capAt`, loest `endJump()` automatisch aus). Ergebnis: 0 Abstuerze
-in einem anschliessenden 40-Minuten-Lauf durch Wueste, Berge und Hoehle.
-
-Drei eigene Testfehler auf dem Weg, alle beim Nachpruefen aufgefallen,
-nicht beim Ausliefern: eine Reihenfolge-Race (Bergabschnitt konnte im
-selben Frame noch starten, in dem `caveOn` gesetzt wurde - behoben durch
-Vertauschen der Pruefreihenfolge), ein Stalaktiten-Test, der das Objekt
-direkt in die Kollisionszone setzte und es dann sofort wegscrollte statt
-natuerlich ankommen zu lassen, und derselbe Fehler ein zweites Mal mit
-falschem Zeitpunkt fuer den Sprung.
-
-**Zeichenreihenfolge:** `drawCeiling()` muss nach Wolken/Bergen/Duenen
-laufen, sonst schweben Wolken sichtbar durch massiven Fels - beim ersten
-Screenshot direkt aufgefallen.
-
-## Hoehlenstart: dauerhafte Freischaltung + Wahl in der Lobby
-
-Sobald die Hoehle einmal in einem echten Spiel (nicht im Vorfuehrmodus)
-erreicht wurde, ruft `unlockCave()` einmalig `localStorage.setItem` auf
-(`hopper.caveUnlocked`). Danach erscheint in der Lobby ein Schalter
-"Hoehlenstart" (`settings.startCave`, ueber den bestehenden Settings-
-Speicherpfad persistiert, kein eigener Schluessel noetig).
-
-`newGame()` prueft `settings.startCave && caveUnlocked` (beide, nicht nur
-einer - ein veraltet "an" gespeicherter Schalter ohne echte Freischaltung
-darf nicht wirken) und initialisiert bei Hoehlenstart direkt:
-`score = CAVE_START`, `distance` passend dazu, `speed = SPEED_MAX`,
-`caveOn = true`, `caveVis = 1` (kein Einblenden noetig - man startet
-bewusst schon drin). Bergabschnitte bleiben dabei aus (caveOn blockiert
-sie von Anfang an), Vogel-/Schlangenrampen stehen durch den hohen Score
-sofort auf Zielwert - konsistent mit "man ist schon mitten im Lauf".
-
-Der Umschalter wirkt bewusst auch auf den Vorfuehrmodus im Hintergrund
-der Lobby - dadurch zeigt die Lobby-Kulisse selbst, was die Einstellung
-bewirkt, statt dass man es erst im echten Spiel sieht.
-
-Verifiziert: Freischaltung nur bei echtem Spiel (nicht im Vorfuehrmodus),
-Schalter erscheint erst danach und ist anklickbar, Zustand persistiert
-ueber den bestehenden Settings-Pfad, ein Hoehlenstart initialisiert
-tatsaechlich mit caveOn/caveVis/Score/Tempo wie oben beschrieben, 8
-Minuten Autopilot-Soak direkt ab Hoehlenstart ohne neue Abstuerze
-(nutzt den bereits fuer 1.12 verifizierten Autopilot-Kurztipp-Fix von
-Anfang an, nicht erst nach Erreichen der Hoehle).
-
-## Zwei getrennte Level statt einer durchgehenden Runde
-
-Grundlegende Umstellung: Level 1 (Wueste) endet jetzt bei Erreichen von
-`CAVE_START`, statt nahtlos in Hoehleninhalte ueberzugehen - kein
-`caveOn`-Umschalten mehr mitten im Lauf. `completeLevel()` ersetzt den
-alten Trigger: schaltet Level 2 dauerhaft frei (`unlockCave()`, wie schon
-in 1.13), schreibt Level 1s Highscore (`HIGH_KEY`/`LAST_KEY`) und setzt
-`settings.startCave = true`, damit "Level 2 spielen" sofort funktioniert.
-Level 2 ist ein eigener, spaeter separat gestarteter Lauf (`newGame()`
-mit `settings.startCave && caveUnlocked`), der wieder bei Score 0 und
-`SPEED_START` beginnt - "am Anfang wieder langsam", nicht die Fortsetzung
-von Level 1s Tempo. Eigene Highscore-Schluessel (`CAVE_HIGH_KEY`/
-`CAVE_LAST_KEY`), damit die beiden Level sich nicht gegenseitig
-ueberschreiben.
-
-Das Game-Over-Overlay wird fuer beide Faelle wiederverwendet (dynamischer
-Titel/Button-Text: "Vorbei"/"Nochmal" bei Tod, "Level 1 geschafft!"/
-"Level 2 spielen" bei Levelabschluss) statt ein zweites, fast identisches
-Overlay zu pflegen.
-
-**Sonderfall Vorfuehrmodus:** Im Hintergrund der Lobby soll kein Overlay
-die Kulisse unterbrechen. `completeLevel()` prueft `state.attract` zuerst
-und setzt dort weiterhin nur `caveOn = true` (die alte 1.12-Mechanik,
-nur fuer die Demo reserviert) - die Lobby-Kulisse geht sichtbar von der
-Wueste in die Hoehle ueber, ohne dass ein echter Levelwechsel stattfindet
-oder ein Overlay aufploppt.
-
-Vier eigene Testfehler beim Verifizieren, alle Zustandslecks zwischen
-Testlaeufen in derselben Browser-Seite (keine Spielfehler): Score nur
-einen statt zwei Frames vor der Schwelle gesetzt (ein Frame reichte nicht
-zum Ueberschreiten), `settings.startCave`/`caveUnlocked` aus einem
-vorherigen Testblock nicht zurueckgesetzt (liess `newGame(false)`
-faelschlich `caveOn=true` liefern), und der `setTimeout(...,420)` in
-`showLevelComplete()` (identisch zu `showGameOver()`) kann in einem rein
-synchronen Testskript nicht feuern - erst mit echtem `await` im Test
-bestaetigt.
-
-## Einlauf-Sequenz statt hartem Schnitt bei Levelabschluss
-
-Bei Erreichen von `CAVE_START` (echtes Spiel, nicht Vorfuehrmodus) springt
-`completeLevel()` nicht mehr sofort auf den Levelabschluss-Bildschirm.
-Stattdessen ein neuer Uebergangszustand `state.entering`
-(`ENTER_DURATION` = 1,3s): eine dunkle Torbogen-Silhouette
-(`drawCaveArch`) scrollt normal mit der Welt heran, die Figur laeuft
-sichtbar weiter darauf zu, danach waechst eine schwarze Blende
-(`drawEnterWipe`) kubisch (`t*t*t`) ueber den Bildschirm - bleibt die
-ersten ~60% der Sequenz klein genug, um den Torbogen noch zu sehen, und
-deckt erst in den letzten Momenten den ganzen Bildschirm ab. Ein linearer
-erster Versuch (`t * 1.25`) war bei der Haelfte der Sequenz schon fast
-komplett schwarz und liess kaum Zeit, den Torbogen ueberhaupt
-wahrzunehmen - per Screenshot bei mehreren Zeitpunkten der Sequenz
-nachjustiert.
-
-`state.phase` bleibt waehrend der ganzen Sequenz `"running"` (Lauf-
-Animation und Weltscroll laufen normal weiter, fuer den Eindruck "die
-Figur laeuft tatsaechlich hinein"), nur `state.entering` sperrt Spawnen
-und Kollision ab - man kann waehrend der Sequenz garantiert nicht sterben,
-verifiziert mit einem absichtlich in die Kollisionszone gelegten
-Hindernis. Erst nach `ENTER_DURATION` ruft es `completeLevel()` wie
-zuvor auf.
-
-Vorfuehrmodus bleibt unveraendert beim sofortigen, unauffaelligen
-Uebergang (`caveOn = true` ohne Sequenz) - eine 1,3-Sekunden-Verdunklung
-mitten in der Lobby-Kulisse waere dort nur eine Ablenkung.
-
-## Hoehlentextur, Deckenhoehe entschaerft, richtiges Level-Menue (1.16)
-
-Drei Rueckmeldungen nach 1.15 auf einmal umgesetzt.
-
-**Textur.** `drawCeiling()` und `drawCaveArch()` waren bisher eine
-einzige flache Farbe (`theme.ground`). Beide bekommen jetzt Tiefe: ein
-per `ctx.clip()` auf die exakte Kontur begrenzter Tiefen-Gradient
-(schwarz-transparent, oben dunkler), dazu Speckel und Risslinien aus
-einer deterministischen Ganzzahl-Hash-Funktion (`rockNoise(n)`) statt
-`Math.random()` - haengen an Weltkoordinaten (wie `ceilingGapAt()`
-selbst), flackern also beim Scrollen nicht. Die Torbogen-Tuer bekam
-zusaetzlich eine zweite Ebene: ein texturierter Steinrahmen aussen, eine
-eigene dunkle Oeffnung (`#0a0c10`) innen, statt einer einzigen Flaeche.
-Bewusst *nicht* `theme.groundFill` fuer den Gradienten verwendet - die
-Rolle kehrt sich zwischen Tag/Nacht um (tags fast weiss, nachts fast
-schwarz), waere also tags als ausgewaschen helle Deckenkante
-aufgefallen. Schwarze Transparenz obendrauf auf der bewaehrten
-`theme.ground`-Basis funktioniert unabhaengig vom Theme. Verifiziert per
-Screenshot (Lobby-Level-Menue, Deckentextur, Torbogen waehrend der
-Einlauf-Sequenz).
-
-**Deckenhoehe.** Rueckmeldung: Hoehle fuehlt sich unfair an, man stoesst
-staendig an. Ursache per Simulation der echten Sprungphysik gefunden
-(nicht geraten): `CAVE_MIN_GAP = 136` hielt nur einem wirklich
-frame-genauen kuerzesten Tipp (~20ms, Kopfhoehe ~115) stand - ein ganz
-normaler schneller Tipp von 60-80ms erreicht bereits Kopfhoehe 143-153
-und traf die Decke an den engsten Stellen. Der sichere Spielraum
-zwischen "kuerzester Tipp" und "voll gehalten" (170) war mit nur 24px
-viel zu knapp fuer echtes menschliches Timing. `CAVE_MIN_GAP` auf 158
-angehoben: ein schneller Tipp bleibt jetzt zuverlaessig sicher, nur
-laengeres Halten (ab ~100ms) trifft noch an den engsten Stellen -
-genau das soll weiter bestraft werden. `CAVE_MAX_GAP` unveraendert.
-Autopilot-Soak (20000 Frames, durchgehend `caveOn`) danach erneut mit
-0 unerwarteten Regressionen: 3 Abstuerze in ~5,5 simulierten Minuten,
-im Rahmen der schon dokumentierten Vorfuehrmodus-Grenze (Autopilot
-prüft nur das naechste Hindernis).
-
-**Level-Menue.** Der einzelne Schalter "Level 2: Hoehle" (nur sichtbar
-nach Freischaltung) wird durch zwei Karten ersetzt (`.levels`-Grid,
-Stil wie die bereits vorhandene Garderobe-Formauswahl): Level 1
-(Wueste) und Level 2 (Hoehle) stehen immer nebeneinander, die
-ausgewaehlte hat einen Rahmen (`aria-pressed`), Level 2 zeigt vor der
-Freischaltung ein Schloss-Badge und ist gedimmt, Klicks darauf bleiben
-dann wirkungslos. `elCaveStartRow`/`elSwCaveStart` durch
-`elLvlDesert`/`elLvlCave`/`elLvlCaveLock` ersetzt, `refreshMenu()`
-und die Klick-Handler entsprechend angepasst. Ein Bug dabei gefunden
-und behoben: `.level .lock { display:flex }` hatte hoehere Spezifitaet
-als die UA-Default-Regel fuer `[hidden]` und ueberstimmte sie, das
-Schloss blieb nach Freischaltung sichtbar - behoben mit einer
-expliziten `.level .lock[hidden] { display:none }`-Regel.
-
-## Decke ist reine Optik, Stalaktiten sind die echte Gefahr (1.17)
-
-Rueckmeldung nach 1.16: die Deckenhoehe trotz hoeherem `CAVE_MIN_GAP`
-immer noch schwierig. Grundproblem war nicht mehr die Zahl, sondern das
-Prinzip: die Deckenhoehe aendert sich kontinuierlich waehrend man zum
-Sprung ansetzt (Sinuswelle, kein fester Wert), man stirbt also an einer
-Stelle, die im Moment des Absprungs noch anders aussah - ein bewegliches
-Zeitfenster statt einer sichtbaren, vorhersehbaren Gefahr. Entscheidung:
-die Decke wird komplett unschaedlich, nur noch Kulisse.
-
-Die eigene Deckenkollision in `update()` (der `state.caveVis > 0.9`-Block)
-ist ersatzlos entfernt. `ceilingGapAt()` bestimmt weiterhin die Zeichnung
-(`drawCeiling()`) und die Haengeposition der Stalaktiten, hat aber keine
-Kollisionsbedeutung mehr - `CAVE_MIN_GAP`/`CAVE_MAX_GAP` sind jetzt reine
-Optik-Werte.
-
-Stalaktiten uebernehmen die komplette Hoehlen-eigene Gefahr: anders als
-die alte Decke sind sie ortsfest und sichtbar, bevor man zum Sprung
-ansetzt - man sieht sie kommen, keine Ueberraschung durch ein
-Zeitfenster, das sich waehrend des Sprungs weiterbewegt. Spawn-Chance
-von 0.22 auf 0.38 angehoben (frueher war die Decke selbst schon die
-Hauptgefahr, jetzt tragen die Stalaktiten das allein). `STALACTITE_TIP_MAX`
-bleibt bei 105, bewusst unter der Kopfhoehe des kuerzestmoeglichen Tipps
-(~115) - jeder Sprung darunter ist weiterhin garantiert toedlich, kein
-Entkommen durch besonders kurzes Antippen.
-
-Verifiziert: voller Sprung unter der engsten Deckenstelle ohne
-Stalaktiten bleibt am Leben (vorher toedlich); ein Stalaktit toetet
-weiterhin bei jedem Sprung darunter, auch beim kuerzestmoeglichen Tipp;
-Stehen/Ducken unter einem Stalaktiten bleibt sicher; Autopilot-Soak
-(20000 Frames, durchgehend `caveOn`, hoehere Stalaktiten-Dichte) zeigt
-mit 2 Abstuerzen in 5,6 simulierten Minuten keine Verschlechterung
-gegenueber vorher.
-
-## Grosses Hoehlen-Redesign: Wueste raus, Fledermaeuse, Stalagmiten (1.18)
-
-Wunsch: die Hoehle soll "viel mehr wie eine Hoehle aussehen" - Wuesten-
-Kulisse raus, Voegel durch Fledermaeuse ersetzen, Kaktus-Skin
-ueberarbeiten.
-
-**Kulisse.** `drawDunes()` (beide Parallax-Ebenen) und `drawMountains()`
-laufen in `render()` jetzt nur noch ausserhalb der Hoehle - vorher
-schauten Duenenhuegel unten aus dem "massiven Fels" heraus, weil sie
-naeher am Boden liegen als die Deckenkontur reicht. `drawClouds()` und
-`drawOrb()` (Sonne/Mond) waren durch die Deckenflaeche zwar schon
-unsichtbar (liegen hoeher im Bild als die engste Deckenkante je reicht),
-werden in der Hoehle aber trotzdem uebersprungen statt sinnlos gezeichnet.
-
-**Feste Hoehlen-Palette statt Tag/Nacht-Zyklus.** Bisher folgten Himmel
-und Boden in der Hoehle weiter `theme.skyTop/skyBot/groundFill` - bei
-"Tag" draussen also ein fast weisser Boden und ein hellblauer Himmel
-mitten in einer angeblich dunklen Hoehle. `CAVE_SKY_TOP`/`CAVE_SKY_BOT`
-(Himmel, `drawSky()`) und ein fixer Bodenton (`drawGround()`) sorgen
-jetzt dafuer, dass die Hoehle immer gleich dunkel aussieht, unabhaengig
-davon, was draussen gerade scheint. Aus demselben Grund bekommen
-`drawCeiling()`/`drawCaveArch()` einen neuen festen Grundton
-(`CAVE_ROCK`) statt `theme.ground` - das tauscht zwischen Tag/Nacht sogar
-die Rolle (tags mittelgrau, nachts hellgrau), die Decke waere also je
-nach Tageszeit unterschiedlich hell gewesen. Kiesel/Trennlinie am Boden
-bekommen aus demselben Grund einen fixen hellen Ton statt
-`theme.dust`/`theme.soft` - die waeren nachts fast so dunkel wie der neue
-feste Boden und darin verschwunden. Die "Sterne" (`drawStars()`) sind in
-der Hoehle immer sichtbar statt nur nachts - lesen sich dort als Glimmer
-im Gestein statt als Sternenhimmel, mit derselben Funktion/denselben
-Positionen wiederverwendet statt einer zweiten Partikelart.
-
-**Boden-Textur.** `drawGround()` bekommt in der Hoehle dieselbe
-`rockNoise()`-Speckel-Technik wie die Decke (siehe 1.16), an dieselbe
-Weltkoordinate (`scrollCeiling`) gehaengt, damit Boden und Decke beim
-Scrollen sichtbar zusammengehoeren statt nur die Decke texturiert
-auszusehen.
-
-**Fledermaeuse statt Voegel.** `spawnObstacle()` markiert den
-Vogel-Zweig in der Hoehle als `kind: "bat"` statt `"bird"` (gleiche
-Spawn-Rampe/Groesse/Hoehenraster, nur die Zeichnung `drawBat()` ist neu:
-spitze Lederfluegel statt Federn, kleine Ohren statt Schnabel). Die
-beiden anderen `kind === "bird"`-Stellen (Flap-Timer in `update()`,
-Autopilot-Klassifikation) pruefen jetzt `"bird" || "bat"`.
-
-**Kaktus-Skin.** `drawCactus()` zeichnet in der Hoehle spitze
-Felszacken/Kristallzacken statt der gruenen Kaktus-Arme - liest sich wie
-ein Stalagmit, passend zu den haengenden Stalaktiten. Spawn-Logik,
-Gruppierung (`count`/`cw`/`ch`/`gap`) und Kollisionsbox bleiben
-unveraendert, nur `drawCactus()` verzweigt auf `state.caveOn`.
-
-Verifiziert: Screenshot-Vergleich mit erzwungener "Nacht" draussen zeigt
-eine optisch identische Hoehle (Beweis, dass die feste Palette wirklich
-unabhaengig vom Zyklus ist); Autopilot-Soak (20000 Frames) zeigt alle
-vier Hoehlen-Hindernisarten (`stalactite`, `cactus`, `bat`, `snake`) und
-mit 2 Abstuerzen in 5,6 Minuten keine Verschlechterung; Level 1 (Wueste)
-per Screenshot gegengeprueft - Sonne/Wolken/Duenen und der originale
-Vogel/Kaktus-Skin unveraendert.
-
-## Zehn weitere Hoehlen-Ideen auf einmal (1.19)
-
-Nach dem Redesign in 1.18 alle zehn vorgeschlagenen Ideen umgesetzt statt
-einzeln nachzufragen.
-
-**Wassertropfen von der Decke.** Reine Deko, kein neues System - nutzt
-das vorhandene `particles`-Array/`spawnParticle()` wieder. Ein Timer
-(`state.dripIn`, Weltdistanz wie `state.spawnIn`) laesst gelegentlich
-einen Tropfen an einer zufaelligen Bildschirm-x-Position genau auf der
-sichtbaren Deckenkante (`ceilingGapAt()`) entstehen. Neue Partikelfarbe
-`"drip"` in `drawParticles()`, mit festem Ton statt `theme.dust` (siehe
-Begruendung bei `CAVE_SKY_TOP`) - ein Wassertropfen soll nicht je nach
-Tageszeit draussen die Farbe wechseln.
-
-**Tropfsteinsaeulen.** Neues Hindernis `"pillar"` - wie ein Stalaktit,
-aber mit deutlich tieferer Spitze (`PILLAR_TIP_MIN/MAX` 26-36 statt
-65-105). Aus der `hits()`-Formel hergeleitet: die Luecke zwischen
-Steh-Kopfhoehe (47) und Duck-Kopfhoehe (30) ergibt eine Sicherheitsspanne
-23-40, in der Stehen IMMER trifft und Ducken IMMER sicher ist - anders
-als beim normalen Stalaktiten (sicher bei Stehen UND Ducken, nur Springen
-gefaehrlich) erzwingt die Saeule also wirklich das Ducken. Nicht nur
-hergeleitet, sondern mit `hits()` bei Tip-Werten 20-44 durchgetestet:
-die Duck-Grenze liegt exakt bei 23, die Steh-Grenze bei 40 - der gewaehlte
-Bereich 26-36 haelt zu beiden je 3-4px Abstand. Rein dekorativer
-Boden-Stumpf (`o.stubH`) direkt darunter lässt es wie eine fast
-geschlossene Saeule mit schmalem Spalt aussehen, ohne eine zweite
-Kollisionsbox zu brauchen. Spawn ueber denselben Wuerfelwurf wie
-Stalaktiten (`spawnObstacle()`), 10 Prozentpunkte davon abgezweigt.
-
-**Leuchtmoos.** Kleine gruene Punkte direkt auf der Bodenlinie in
-`drawGround()`, eigener Zufalls-Seed (`rockNoise(n*2237)`, Schritt 48)
-statt des Fels-Speckel-Seeds, damit die Muster nicht synchron laufen -
-einziger Farbakzent am Boden.
-
-**Fledermausschwaerme.** `spawnObstacle()` spawnt in der Hoehle mit 30%
-Chance 2-3 Fledermaeuse statt einer, alle auf derselben Hoehe (nicht
-versetzt) - eine Hoehenvarianz haette die Autopilot-Klassifikation
-(`o.y`-Schwellen fuer duck/jump) pro Tier unterschiedlich ausfallen
-lassen koennen.
-
-**Echo.** `withCaveEcho()` spielt denselben Klang nochmal bei 32%
-Lautstaerke, 110ms verzoegert (kein echter Convolver - haette den
-winzigen Synth-Ansatz gesprengt). Nur an Sprung/Landung/Tod, den drei
-staendig wiederkehrenden Spiel-SFX - nicht an Menue-Klaengen.
-
-**Kristalle.** Eigenes Array `collectibles`, nicht `obstacles` -
-`hits()` ist generisch (prueft nur x/y/w/h) und laesst sich direkt
-wiederverwenden, bei Treffer aber `state.bonus += 25` statt `die()`.
-`state.score` ist jetzt `Math.floor(distance/14) + state.bonus` statt
-nur der Distanz-Formel. Immer auf dem Boden platziert (nie in
-Sprunghoehe) - ein Bonus darf niemals eine Risiko-Entscheidung
-erzwingen. Erster Anlauf (Intervall 420-800 Weltdistanz) spawnte 539
-Kristalle in 8 Minuten Autopilot-Soak - fuehlte sich wie ein
-Dauerzustand an, nicht wie ein Fund. Grund: das Intervall ist eine feste
-Distanz, aber `state.speed` waechst uebers Spiel, dieselbe Distanz kommt
-also in echter Zeit immer schneller wieder (derselbe Effekt wie bei
-`nextMountainGap()`, nur hier nicht extra kompensiert). Nach zwei
-weiteren Messungen (900-1600 → 632 in 20 Minuten, immer noch zu dicht)
-auf 1800-3000 angehoben - 335 in 20 Minuten (~alle 3,6s), fuehlt sich
-nach einem echten Fund an.
-
-**Vignette.** `drawCaveVignette()`, ein Radialverlauf zentriert auf die
-Bildschirmmitte (nicht auf die Figur - die steht nah am linken Rand,
-ein Kegel dort haette den ganzen rechten Bildschirmbereich mit den
-Hindernissen abgedunkelt und die Fairness-Grundregel verletzt, dass man
-jede Gefahr rechtzeitig sehen muss). Nur die Ecken werden dunkler, der
-komplette Spielbereich bleibt hell genug.
-
-**Lavaschein.** `drawCaveGlow()`, ein langsam pulsierender
-(`state.time`-basiert) warmer Gradient am unteren Bildrand - einziger
-Warmton in einer sonst reinen Grau/Schwarz-Palette.
-
-**Hoehlenmalereien.** Seltene, blasse Strich-Glyphen direkt in
-`drawCeiling()` ergaenzt (dieselbe geclippte Flaeche, dieselbe
-`rockNoise()`-Technik wie Speckel/Risse, aber mit deutlich groesserem
-Schritt/niedrigerer Wahrscheinlichkeit, damit sie selten bleiben).
-
-**Spinnennetze.** `drawCobwebs()`, feste Bildschirmposition in den
-oberen Ecken (kein Weltbezug, scrollt nicht mit).
-
-Alle zehn greifen ausschliesslich bei `state.caveOn` - Level 1 (Wueste)
-unveraendert. Verifiziert: `hits()`-Direkttest der Saeule bei Tip-Werten
-20-44 fuer Stehen/Ducken/Springen (siehe oben); Kristall-Aufnahme per
-direktem `update()`-Aufruf (Bonus/Score korrekt, kein Tod, Objekt
-entfernt); Autopilot-Soak 30000 Frames (8,3 Minuten) mit allen Funden
-gleichzeitig - 4 Abstuerze, alle fuenf Hoehlen-Hindernisarten
-(`cactus`, `pillar`, `stalactite`, `snake`, `bat`) vertreten, keine
-Verschlechterung gegenueber 1.18; Level-1-Soak zur Gegenprobe (nur
-Wuesten-Hindernisse, bis die im Vorfuehrmodus laengst bestehende
-automatische Wueste-zu-Hoehle-Umschaltung ab Score 2000 einsetzt -
-das ist keine neue Aenderung, sondern dieselbe seit 1.12 bestehende
-Vorfuehrmodus-Kulisse); kein Konsolenfehler ueber rund 183000
-`update()`-Aufrufe in Summe.
-
-## Kristall-Skin: Zacken-Cluster statt flacher Raute (1.20)
-
-Vorlage: ein Foto eines echten blauen Kristallstocks (mehrere spitze
-Zacken unterschiedlicher Hoehe von einer gemeinsamen Basis aus, jede
-Flaeche mit hellerer Kante fuer den Glas-Eindruck). `drawCrystal()`
-zeichnet jetzt so einen Cluster statt der bisherigen einzelnen flachen
-Raute: pro Zacke zwei Formen uebereinander (dunklerer Koerper `#2f9fc9`
-+ helle Facette `#d8f7fb`), dazu eine kleine dunkle Ellipse als
-Fels-Basis. Drei Cluster-Layouts (`CRYSTAL_VARIANTS`, 2-4 Zacken je
-Variante) fuer sichtbare Abwechslung, dieselbe Idee wie die drei
-`drawRock()`-Varianten. `variant` wird beim Spawnen zufaellig gewaehlt
-und im Objekt gespeichert (wie bei Felsen). Kollisionsbox minimal
-vergroessert (14x16 -> 20x24) fuer den breiteren Cluster-Umriss - reine
-Optik-Anpassung, Aufnahme bleibt wie zuvor "einfach durchlaufen reicht".
-
-Nebenbei einen Dokumentationsfehler behoben: der Kommentar bei
-`state.crystalIn` nannte noch "236" Funde aus einem fruehen,
-ungetesteten Kommentarentwurf - der tatsaechlich gemessene Wert war
-335 (siehe 1.19). Zahl im Code-Kommentar korrigiert, README war
-bereits korrekt.
-
-Verifiziert: alle drei Varianten nebeneinander gerendert und per
-Screenshot geprueft; Aufnahme per direktem `update()`-Aufruf weiterhin
-korrekt (Bonus +25, Objekt entfernt, kein Tod); Autopilot-Soak (18000
-Frames) ohne Regression.
-
-## Missverstaendnis korrigiert: Kristalltextur galt den Boden-Hindernissen (1.21)
-
-"Mit den Kristallen habe ich die Hindernisse auf dem Boden gemeint" -
-1.20 hatte das falsche Objekt umgebaut. Gemeint war das in 1.18 auf
-graue Felszacken umgestellte `drawCactus()` (Hoehle) - das sollte die
-Kristalltextur aus der Referenz bekommen, nicht das Sammelobjekt.
-
-`drawCrystalSpike()` (aus 1.20) um zwei Farbparameter erweitert
-(`body`/`facet`, vorher fest verdrahtet auf `#2f9fc9`/`#d8f7fb`) und
-direkt in `drawCactus()`s Hoehlen-Zweig wiederverwendet: pro Cluster
-zwei Zacken (eine grosse, eine kleine) statt der bisherigen grauen
-Dreiecke, in `theme.ground`. Drei Farbvarianten (`CRYSTAL_HAZARD_COLORS`
-- Blau, Tuerkis, Violett), eine pro Hindernis (nicht pro Zacke, damit
-ein Cluster wie eine zusammenhaengende Formation wirkt), gewaehlt beim
-Spawnen wie bei den Felsen-Varianten.
-
-Bewusst *nicht* dieselben Farben/dieselbe Groesse wie das
-Sammelobjekt: das Hindernis ist deutlich groesser (ganze
-Kaktus-Hoehe, 36-50px) und hat keinen Glimmer-Halo/Puls - Farbe allein
-sollte nicht der einzige Unterschied zwischen "toedlich" und
-"harmlos aufsammelbar" sein. Kollisionsbox/Spawn-Logik unveraendert,
-nur die Zeichnung wechselt (wie schon beim Rock-Skin in 1.18).
-
-Verifiziert: drei Farbvarianten nebeneinander gerendert und per
-Screenshot geprueft (deutlich von Stalaktiten/Stalagmiten UND vom
-kleinen Sammelobjekt unterscheidbar); Autopilot-Soak (18000 Frames,
-5 Minuten) - 3 Abstuerze, keine Verschlechterung, alle Hoehlen-
-Hindernisarten weiterhin vertreten.
-
-## Kristalle: Glow + glasigere Optik (1.22)
-
-Rueckmeldung: die Boden-Kristalle sollten einen Schein-Effekt bekommen
-und realistischer aussehen.
-
-`drawCrystalSpike()` (Sammelobjekt UND Hindernis nutzen dieselbe
-Funktion) zeichnet den Zacken-Koerper jetzt mit einem Farbverlauf
-(hell zur Spitze, dunkler zur Basis - wirkt, als faengt die Spitze
-Licht) statt einer flachen Farbe, dazu eine duenne halbtransparente
-weisse Glanzkante an einer Seite. Neue Funktion `drawCrystalGlow()`
-(Radialverlauf, Hex+Alpha-Farbe statt `rgba()` - dieselbe Farbvariable
-reicht dann fuer Fuellung und Schein) aus dem bisherigen
-Sammelobjekt-Glimmer herausgezogen, damit auch `drawCactus()`s
-Hoehlen-Zweig sie nutzen kann - vorher hatte nur das Sammelobjekt einen
-Schein.
-
-Die in 1.21 begruendete Abgrenzung (Hindernis bewusst ohne
-Glimmer/Puls, damit "toedlich" und "harmlos" unterscheidbar bleiben)
-gilt jetzt anders: Groesse ist der Haupt-Unterschied (das Hindernis
-ist ueber die ganze Kaktus-Hoehe/Cluster-Breite gross, das
-Sammelobjekt bleibt ein kleiner einzelner Fund), Glow allein war
-ohnehin nie das tragende Unterscheidungsmerkmal.
-
-Verifiziert: Screenshot mit allen drei Hindernis-Farbvarianten plus
-Sammelobjekt nebeneinander; Autopilot-Soak (18000 Frames) ohne
-Regression; kein Konsolenfehler.
-
-## Passende Fels-Textur fuer Stalaktiten/-saeulen (1.23)
-
-Rueckmeldung mit einem Icon-Set als Vorlage: mehrfarbige, gesprenkelte
-Gesteinsflecken statt einer einzelnen Flaechenfarbe.
-
-Neue Funktion `drawIcicleTexture(x, y, w, h, seed)`: mehrere
-halbtransparente helle/dunkle Kreis-Patches (`ICICLE_LIGHT`/`ICICLE_DARK`,
-per `shadeColor()` aus `CAVE_ROCK` aufgehellt/abgedunkelt) auf die
-bereits gefuellte Dreieckskontur geclippt, plus ein duenner dunkler
-Grat in der Mitte fuer die Rippenoptik der Vorlage. `drawStalactite()`
-und `drawPillar()` (der haengende Teil) rufen sie nach der Basisfuellung
-auf. Patch-Positionen haengen an einem neuen `o.seed` (bei `spawnStalactite()`/
-`spawnPillar()` gesetzt), nicht an `o.x` - sonst haette das Muster beim
-Scrollen "gewandert" statt am Objekt zu haften, dieselbe Ueberlegung wie
-bei den Decken-Speckeln (dort ist die Weltkoordinate selbst der Seed,
-hier ein gespeicherter Zufallswert, weil ein einzelner Stalaktit anders
-als die durchgehende Decke keine feste Weltposition zum Verankern hat).
-
-Nebenbei: `theme.ground` (folgt dem Tag/Nacht-Zyklus) durch `CAVE_ROCK`
-(fest, dieselbe Farbe wie Decke/Torbogen) ersetzt - Stalaktiten/-saeulen
-sind reine Hoehlen-Hindernisse, sollen also derselben "immer gleich
-dunkel"-Logik folgen wie der Rest des Gesteins (siehe 1.18).
-
-Der dekorative Boden-Stumpf der Saeule bleibt bewusst ohne Textur: die
-Funktion nimmt eine nach unten zeigende Kontur an (breite Basis oben,
-Spitze unten, wie beim haengenden Teil), der Stumpf zeigt aber nach
-oben - waere falsch geclippt worden. Bei seiner Groesse faellt die
-einfarbige Flaeche nicht auf.
-
-Verifiziert: per Screenshot bei vergroesserter Testgroesse (Textur
-deutlich sichtbar) und bei echter Spielgroesse (Textur subtil, aber
-vorhanden - dieselbe Erwartung wie bei den Decken-Speckeln, die auf
-einem richtigen Geraet mit hoeherer Aufloesung besser lesbar sind als
-in der 800px-Vorschau); sechs Autopilot-Soaks (18000 Frames) je
-2-9 Abstuerze - erhoehte Streuung, aber nicht systematisch schlechter,
-sondern dieselbe bekannte Autopilot-Grenze (prueft nur das naechste
-Hindernis) bei mehreren gleichzeitig aktiven Hoehlen-Gefahrenarten.
-
-## Fledermaeuse: realistischer + fliegen aktiv auf den Spieler zu (1.24)
-
-**Optik.** `drawBat()` bekommt richtige Fluegel statt einer einzelnen
-Dreiecksflaeche: `drawBatWing()` spannt drei "Finger" (Vorlage: echte
-Fledermaus-Anatomie - eine Membran zwischen gespreizten Handknochen)
-vom Handgelenk zu drei Membran-Punkten auf, mit duennen
-halbtransparent-schwarzen Ritzen dazwischen (dunkelt zuverlaessig ab,
-egal wie hell `theme.ground` gerade ist - kein zweiter Theme-Wert
-noetig). Dazu eine kleine Schnauze und zwei helle Augen-Glanzpunkte.
-Der Flap nutzt jetzt einen kontinuierlichen Winkel (`Math.sin(o.flap)`)
-statt zweier hart geschalteter Posen - fluessigere Bewegung.
-
-**Aktiver Flug.** Fledermaeuse hatten wie Voegel bisher nur die normale
-Weltscroll-Bewegung. Jetzt: sobald eine Fledermaus naeher als 260
-Weltdistanz an den Spieler herankommt, bekommt sie eine zusaetzliche
-Schliessgeschwindigkeit (`o.diveExtra`, deckelt bei 150, waechst mit
-300/s) - liest sich wie ein gezieltes Zuschwirren statt passivem
-Vorbeitreiben. Der Autopilot rechnet das in seine `closingSpeed` mit
-ein, dieselbe Loesung wie schon bei rollenden Felsen (`rollExtra`).
-
-**Sicherheitslektion unterwegs:** der erste Versuch liess auch die
-tatsaechliche Kollisionshoehe (`o.y`) im Sinus mitschwingen (+-9px,
-fuer eine Flugwelle). Autopilot-Soak sprang danach von 2-9 auf 9-17
-Abstuerze pro 5 Minuten, fast ausschliesslich Fledermaus-Treffer -
-Ursache gefunden per direktem `hits()`-Nachrechnen: die mittlere
-Hoehenstufe hatte beim Ducken nur ~5px Sicherheitsabstand
-(`ry`=`groundY-25` vs. Fledermaus-Unterkante `groundY-30` bei
-statischer Hoehe), die 9px-Amplitude riss diesen Abstand also klar.
-Fix: `o.y` (Kollision) bleibt fest auf `baseY`, die Flugwelle
-(`o.bobT`) bewegt nur noch die Zeichnung (`drawBat()`s lokaler
-`bobOffset`, Amplitude 5px rein optisch) - Kollisionsverhalten seitdem
-wieder exakt wie bei der urspruenglichen statischen Hoehe.
-
-Verifiziert: isolierte Einzelfledermaus per Frame-fuer-Frame-Log
-(Autopilot duckt korrekt, kein Trefferereignis); enger Schwarm
-(3 Fledermaeuse, 46px Abstand) 10x wiederholt - 1 Treffer in 10
-Durchlaeufen (im Rahmen der dokumentierten Autopilot-Grenze bei engen
-Formationen, keine neue Regression); volle Autopilot-Soaks (6x 18000
-Frames, danach 1x 36000 Frames) zurueck im Basiswert 1-4 Abstuerze;
-kein Konsolenfehler; Screenshot mit Einzeltier und Dreiergruppe in
-unterschiedlichen Flap-Phasen.
-
-## Voegel aufgewertet + Level 1 zeigt ein kleineres, aber laengeres Ziel (1.25)
-
-**Voegel.** Eigene Anatomie statt Fledermaus-Kopie: `drawBirdWing()`
-staffelt drei Schwingen abnehmender Laenge/Deckkraft (Handschwingen
-vorn, kuerzere Armschwingen dahinter, wie echtes Vogelgefieder) und
-rotiert sie gemeinsam um die Schulter statt zwischen zwei Posen zu
-springen - dieselbe Kontinuierlich-Winkel-Idee wie bei der Fledermaus
-(1.24), aber Federn statt Lederfinger. Dazu ein spitzer Dreiecks-
-Schnabel statt des alten Rechtecks und zwei kleine Schwanzfedern hinten.
-Bewusst *keine* aktive Flugbewegung (kein `diveExtra`/Ansteuern des
-Spielers wie bei Fledermaeuse) - nicht angefragt, und nach dem
-Fledermaus-Kollisionsbug (siehe 1.24) ein guter Grund, hier nicht ohne
-Anlass dasselbe Risiko einzugehen. Rein optisch, Spawn/Kollision
-unveraendert.
-
-**Level-1-Ziel.** Rueckmeldung: der angezeigte Zielwert sollte kleiner
-wirken (1000 statt 2000), Level 1 soll aber laenger dauern - "so lange
-wie es vorher bis 3000 gedauert haette". Zwei Groessen, die bisher
-identisch waren (der interne Rohwert fuer alle Schwierigkeits-Trigger
-UND die angezeigte Zahl), mussten dafuer entkoppelt werden:
-
-- `CAVE_START` 2000 -> 3000 (weiterhin derselbe Rohwert, derselbe
-  `state.score`, dieselbe Formel `distance/14` - Level 1 dauert dadurch
-  laenger, ca. Faktor 1.3-1.4 in echten Frames gemessen, nicht linear
-  zur Score-Erhoehung wegen der Tempo-Rampe am Anfang).
-- Neue Funktion `dispScore(raw)` (= `Math.floor(raw/3)`), die NUR an
-  den fuer den Spieler sichtbaren Stellen greift: HUD (`drawHud()`,
-  nur wenn `!state.caveOn`), Pause-Screen, Game-Over/Levelabschluss-
-  Bildschirm (`showGameOver()`/`showLevelComplete()`) und die Lobby
-  (`refreshMenu()`, nur im Wueste-Zweig). `state.score`/`state.high`
-  selbst bleiben unveraendert (Rohwert) - jede interne Schwierigkeits-
-  Logik (`BIRD_START`, `SNAKE_START`, Bergabschnitte, Nachtzyklus) haengt
-  exakt an dieser Rohgroesse und blieb dadurch **absichtlich** zeitlich
-  komplett unangetastet, obwohl sie nicht angefragt war. Level 2 (Hoehle)
-  zeigt weiterhin den echten Rohwert - dort wurde nichts geaendert,
-  `state.caveOn` gated jede `dispScore()`-Anwendung.
-- Persistierte Highscores (`HIGH_KEY`/`LAST_KEY`) speichern weiterhin
-  den Rohwert, `dispScore()` wird erst beim Anzeigen angewendet - kein
-  Migrations-/Formatwechsel fuer bestehende Speicherstaende noetig.
-
-Verifiziert: Simulation von Score 0 bis zum Levelabschluss zeigt
-`dispScore(3000)===1000` und der tatsaechliche Levelabschluss-Bildschirm
-(`oScore`/`oHigh`) exakt diesen Wert; HUD-Screenshots in Level 1 (skaliert,
-z.B. "00500"/"HI 01000") und Level 2 (unskaliert, "HI 05000") direkt
-gegenuebergestellt; Autopilot-Soaks fuer Level 1 (4x, bis zu 2,5 Minuten
-oder Hoehlen-Uebergang) mit 0 Abstuerzen, keine Regression durch die
-neue Vogel-Zeichnung.
-
-## Vogel-Blickrichtung korrigiert (1.26)
-
-Rueckmeldung direkt nach 1.25: die Voegel fliegen "in die falsche
-Richtung". Kopf/Schnabel sassen rechts, Schwanz links - der Vogel
-bewegt sich aber (wie alle Hindernisse) mit dem Weltscroll nach links
-auf die Figur zu, sah also aus, als fliege er rueckwaerts. Beim alten
-Rechteck-Fluegel (vor 1.25) war das kaum sichtbar, mit dem neuen
-spitzen Dreiecks-Schnabel fiel es sofort auf.
-
-`drawBird()` horizontal gespiegelt: Kopf/Schnabel jetzt vorn links
-(Flugrichtung), Schwanzfedern hinten rechts, Fluegel-Drehpunkt
-entsprechend mitverschoben. Reine Koordinaten-Aenderung, `drawBirdWing()`
-selbst unangetastet. Die Fledermaus war davon nicht betroffen - ihre
-Schnauze zeigt nach unten, nicht seitlich, es gibt also keine Links/
-Rechts-Asymmetrie, die falsch herum sitzen koennte.
-
-Verifiziert: Screenshot mit drei Voegeln in unterschiedlichen Flap-
-Phasen - Schnabel zeigt jetzt in Bewegungsrichtung; Autopilot-Soak
-(9000 Frames) weiterhin 0 Abstuerze; kein Konsolenfehler.
-
-## Level 1: Prozent-Fortschritt statt Punktzahl (1.27)
-
-Wunsch: "ein Counting System % so wie in Geometry Dash" statt der
-1.25-Skalierung (Rohpunkte/3, Ziel zeigte "1000").
-
-`pctScore(raw)` ersetzt `dispScore()` vollstaendig -
-`Math.min(100, Math.floor(raw / CAVE_START * 100))` statt einer festen
-Division. Neue Helper-Funktion `fmtScore(raw, caveOn)` buendelt die
-Formatwahl an allen fuenf Anzeige-Stellen (HUD, Pause, Game-Over,
-Levelabschluss, Lobby): Level 1 "NN%", Level 2 weiterhin `pad5()` - in
-der endlosen Hoehle gibt es kein definiertes Ziel, ein Prozentwert
-ergaebe keinen Sinn. `state.score`/`state.high` bleiben unveraendert
-Rohwerte, genau wie in 1.25 - nur die Formatierung an der Anzeige
-aendert sich.
-
-Das "Punkte"-Label auf dem Pause- und dem Game-Over-Bildschirm wechselt
-jetzt dynamisch zu "Fortschritt", wenn ein Prozentwert statt einer
-Punktzahl angezeigt wird (`pScoreLabel`/`oScoreLabel`, neue IDs) - "Punkte:
-74%" waere sonst eine falsche Bezeichnung fuer das, was da eigentlich
-steht. Der Levelabschluss-Bildschirm zeigt planmaessig immer "100%"
-(die `pctScore()`-Deckelung faengt ab, dass `state.score` im exakten
-Trigger-Frame minimal ueber `CAVE_START` liegen kann).
-
-Verifiziert: HUD/Pause/Levelabschluss/Lobby je per direktem
-Funktionsaufruf und Screenshot geprueft (u.a. "HI 100%"/"50%" waehrend
-des Laufs, "Fortschritt: 100%" beim echten Levelabschluss ueber
-Autopilot-Steuerung, Level 2 weiterhin unveraendert "04500"/"05000");
-Autopilot-Soak (9000 Frames) ohne Regression; kein Konsolenfehler.
-
-## Level 1: mehr Tempo und Dichte zum Levelabschluss hin (1.28)
-
-Eigene Einschaetzung nach 1.27 bestaetigt bekommen: Level 1 kam in
-Autopilot-Soaks durchgehend auf 0 Abstuerze, und Voegel/Schlangen sind
-schon bei Fortschritt ~15-25% voll eingefuehrt - der laengere Rest des
-Levels brachte nichts Neues mehr. Zwei unabhaengige Stellschrauben,
-beide **nur in Level 1** (Level 2/die Hoehle hat ihr eigenes, bereits
-verifiziertes Tuning und war nicht angefragt):
-
-- **Tempo.** Neue Konstante `SPEED_MAX_L1 = 1400` (Level 1) getrennt von
-  `SPEED_MAX = 960` (weiterhin die Hoehle) - `state.speed = Math.min(
-  state.caveOn ? SPEED_MAX : SPEED_MAX_L1, ...)`. Die alte Obergrenze 960
-  wurde nach 42s erreicht und blieb fuer den Rest des (jetzt laengeren)
-  Levels flach; 1400 wird bei gleichem `SPEED_RAMP` erst nach 71s
-  erreicht - laenger als Level 1 dauert (per Simulation: 56s bis
-  Levelabschluss, Tempo dort bei 1170 und weiter steigend). Das Tempo
-  eskaliert jetzt durchgehend bis zum Ende statt vorher zu plateauen.
-- **Dichte.** `obstacleGap()` bekommt in Level 1 einen zusaetzlichen
-  Faktor `Math.max(0.72, 1 - state.score/CAVE_START*0.28)`, der den
-  Basis-Abstand zum Levelende hin um bis zu 28% verkuerzt. Wichtig: der
-  Abstand skaliert schon mit `state.speed` (Zeit zwischen Hindernissen =
-  Abstand/Tempo = reiner Koeffizient, unabhaengig vom Tempo selbst) -
-  der neue Faktor kuerzt also wirklich die Reaktionszeit zwischen
-  Hindernissen, nicht nur die Distanz am Bildschirm. Die Untergrenze
-  0.72 (nicht 0.5 oder tiefer) haelt das im per Autopilot-Soak
-  verifizierten fairen Rahmen.
-
-Verifiziert: sechs Autopilot-Soaks fuer Level 1 - 0-2 Abstuerze pro
-Lauf (vorher durchgehend 0), Todesfaelle liegen bei Fortschritt-Werten
-zwischen 25% und 69%, keine Haeufung ganz am Levelende trotz hoechster
-Dichte/hoechstem Tempo dort - keine unfaire Spitze. Level-2-Soak
-(18000 Frames) zeigt weiterhin `maxSpeed === 960` (Obergrenze
-unveraendert) und dieselbe Abstuerzerate wie vor der Aenderung; kein
-Konsolenfehler.
-
-## Eigentest deckt Fairness-Luecke auf: SPEED_MAX_L1 wieder entfernt (1.29)
-
-Wunsch: selbst testen, ob sich 1.28 fair anfuehlt - nicht nur per
-Autopilot-Abstuerzerate (die reagiert immer exakt im letztmoeglichen
-Frame, ohne jede Verzoegerung, und hatte deshalb schon immer eine
-optimistischere Fairness-Aussage als ein echter Mensch sie bekommt).
-Neue Messgroesse: wie lange ist ein Hindernis sichtbar, bevor
-`autoPilot()`s eigene `tTrigger`-Formel "jetzt handeln" sagt (= der
-spaeteste noch sichere Moment)? Das ist das tatsaechliche
-Reaktionsfenster, das ein Mensch fuer EIN Hindernis hat.
-
-Ergebnis: das Minimum liegt schon beim unveraenderten Basiswert
-(`SPEED_MAX=960`, keine Dichte-Aenderung) bei 283ms - eher knapp,
-aber seit jeher so und nie beanstandet. Mit `SPEED_MAX_L1=1400`
-faellt das Minimum auf 183-233ms, und zwar **allein durchs Tempo**:
-ein Test mit reiner Dichte-Aenderung bei unveraendertem Tempo (960)
-unterschreitet in keinem Fall die 283ms, weil Dichte nur den Abstand
-ZWISCHEN Hindernissen aendert, nicht die Vorlaufzeit fuer eines davon
-(die haengt einzig an `state.speed`, ueber `tContact`/`tPass` in der
-`tTrigger`-Formel). Schon `SPEED_MAX_L1=1050` (nur 9% ueber 960) drueckt
-das Minimum bereits unter 283ms. Mit der aktuellen `tTrigger`-Formel
-(kein eingebauter Sicherheitspuffer, sie berechnet den spaetest-
-moeglichen Moment) ist mehr Tempo also nicht ohne Fairness-Verlust zu
-haben.
-
-Konsequenz: `SPEED_MAX_L1` komplett entfernt, Level 1 nutzt wieder
-`SPEED_MAX=960` wie die Hoehle. Die Dichte-Erhoehung aus 1.28
-(`obstacleGap()`) bleibt unveraendert bestehen, weil sie nachweislich
-keinen Einfluss auf dieses Reaktionsfenster hat.
-
-Verifiziert: Messung des Reaktionsfensters bei `SPEED_MAX_L1` in
-{960, 1050, 1100, 1150, 1250, 1400} zeigt einen klaren Zusammenhang
-(hoeher = kuerzeres Minimum, durchgehend unter 283ms sobald ueber
-960); dieselbe Messung nur mit Dichte-Variation (Boden bei 1.0/0.9/
-0.85/0.8, Tempo fest bei 960) zeigt durchgehend 283ms, 0 kurze
-Fenster; finaler Soak (Tempo zurueckgesetzt, Dichte behalten) 0-1
-Abstuerze pro Lauf, Reaktionsfenster wieder bei 283ms.
-
-## Schlangen-Ueberarbeitung: neongruenes Gift, das auf die Spielerhaltung zielt (1.29)
-
-Wunsch: Schlangen sollen neongruenes Gift schiessen, das den Spieler
-verfolgt. Bewusst NICHT als echtes Dauer-Tracking umgesetzt, direkt im
-Anschluss an die obige Fairness-Lektion: ein Geschoss, das jeden Frame
-neu auf die aktuelle Spielerposition nachlenkt, haette dieselbe Art
-Verifikationsarbeit gebraucht wie oben (und mehr) - mit echtem Risiko,
-am Ende ein technisch unmoegliches Ausweich-Szenario zu bauen. Stattdessen:
-das Geschoss zielt GENAU EINMAL beim Abschuss auf die aktuelle Haltung der
-Figur (`poisonTargetY()`) und fliegt danach schnurgerade auf dieser
-Bahn - technisch identisch zu einem Vogel (dieselbe `hits()`/
-`autoPilot()`-Hoehenlogik, dieselben zwei unteren Hoehenstufen), nur
-die Zielwahl kommt von der Spielerhaltung statt vom Zufall. Neongruener
-Glimmer-Halo + Kometenschweif (`drawPoison()`) tragen den "gezielter
-Schuss"-Eindruck optisch.
-
-Zwei echte Bugs beim Bauen gefunden und behoben (nicht nur Tuning):
-
-1. **Fehlendes `*dt`.** Die Bonusgeschwindigkeit wurde anfangs als
-   `move = dx + POISON_EXTRA` statt `dx + POISON_EXTRA*dt` addiert -
-   bei `POISON_EXTRA=260` waren das ~15600px/s zusaetzlich statt 260px/s,
-   das Geschoss war praktisch sofort da (Reaktionsfenster 0ms).
-2. **Falsche "harmlose" Hoehe.** `poisonTargetY()` zielte anfangs auf
-   die hohe/ignorierbare Vogel-Bahn, wenn die Figur beim Abschuss
-   gerade in der Luft war ("dann ist da oben ja niemand"). Falsch:
-   `hits()` zeigt, dass die Kollisionsbox waehrend des Steig-/Fallteils
-   eines Sprungs (`runner.y` zwischen ca. -77 und -14) trotzdem in die
-   obere Bahn hineinreicht - und da das Geschoss mehrere Sekunden
-   unterwegs ist, kann die Figur in der Zwischenzeit fuer ein ganz
-   anderes Hindernis laengst wieder gesprungen sein. Soak-Test: 2 von 10
-   Laeufen ein Treffer, obwohl das Reaktionsfenster dem sonst ueberall
-   sicheren Basiswert entsprach. Fix: nur noch die beiden unteren, aktiv
-   zu konternden Bahnen (ducken/springen), nie "einfach nichts tun".
-3. **Unloesbare Kombination mit der Schlange selbst.** Erste Fassung
-   feuerte das Geschoss von derselben Position UND Geschwindigkeit wie
-   die ausloesende Schlange ab - beide kommen dann zwangslaeufig
-   gleichzeitig an. Verlangte das Geschoss dabei "ducken", waehrend die
-   Schlange (wie immer) "springen" verlangt, war das ein garantierter,
-   unloesbarer Treffer. Fix: eigener Spawn-Zweig (`POISON_START/RAMP/
-   TARGET`, ab Score 520) statt an den Schlangen-Spawn gehaengt - laeuft
-   dadurch durch `obstacleGap()` wie jedes andere Hindernis und bekommt
-   denselben garantierten Abstand zu allem anderen, inklusive Schlangen.
-
-`POISON_EXTRA` bleibt am Ende bei 0 (keine Zusatzgeschwindigkeit) -
-schon 45px/s zusaetzlich draengten das Reaktionsfenster von 283ms auf
-250ms und erzeugten im Soak echte Treffer. Die neongruene Optik traegt
-den "Schuss"-Eindruck bereits ausreichend, ohne zusaetzliches Risiko.
-
-Verifiziert: 20 Autopilot-Soaks (9000 Frames) nach beiden Fixes - 0
-Gift-Treffer (vorher 2-3 pro 10 Laeufe je nach Bug), Reaktionsfenster
-283ms (Basiswert); Screenshot mit beiden Zielbahnen (Stehen -> mittel,
-Ducken -> tief); kein Konsolenfehler.
-
-## Gift sichtbar an die Schlange gekoppelt + Hoehlen-Sprunghoehe korrigiert (1.30)
-
-Feedback nach 1.29: "die projektile fliegen nicht von den schlangen weg
-sondern irgendwann danach oder davor". Der eigene Spawn-Zweig aus 1.29
-loeste Fairness-Probleme, aber der Preis war ein komplett unabhaengiger
-Zeitplan (`obstacleGap()`-Abstand zu IRGENDEINEM vorherigen Hindernis) -
-das Geschoss hatte optisch keinerlei erkennbare Verbindung mehr zu einer
-bestimmten Schlange.
-
-**Fix:** eine Schlange "queued" das Gift jetzt bei ihrem eigenen Spawn
-(`state.poisonQueued`), und `spawnObstacle()` loest es garantiert als
-naechstes Hindernis aus - immer von derselben Kante (`LW+20`) wie die
-Schlange kurz zuvor, und bei gleicher Schliessgeschwindigkeit
-(`POISON_EXTRA=0`) bleibt es die ganze Zeit im festen Abstand HINTER ihr,
-wie ausgespuckt. Ein kleiner Partikel-Spuckeffekt an der Schlangen-Position
-markiert den Abschuss zusaetzlich.
-
-Der erzwungene Abstand brauchte zwei Anlaeufe:
-
-1. **260-430** (klein, damit die Schlange bei `LW~620` noch im Bild ist,
-   wenn das Gift spawnt). Autopilot-Soak mit echter Treffer-Zuordnung (statt
-   nur dem Reaktionsfenster-Mass) zeigte aber 5 von 43 Gift-Treffern bei
-   Hoechsttempo: `autoPilot()` reagiert pro Frame nur auf das jeweils
-   naechste Hindernis (die Schleife bricht nach dem ersten passenden ab).
-   Bei kleinem Abstand liegt der Sprung-Trigger der Schlange zeitlich zu
-   nah am Duck/Sprung-Trigger des Gifts - Letzteres wird dabei uebersprungen,
-   bis es zu spaet ist. Da beide Objekte dieselbe Schliessgeschwindigkeit
-   haben, ist der zeitliche Abstand ihrer Trigger-Momente = Abstand/Tempo,
-   unabhaengig vom Tempo selbst.
-2. **600-750** behebt das: 0 Gift-Treffer in ueber 60 simulierten Minuten
-   (Wueste und Hoehle, Autopilot-Soak mit echter Treffer-Zuordnung). Die
-   Schlange ist dadurch bei hohem Tempo oft schon aus dem Bild (620 LW),
-   aber noch oft genug sichtbar - Sicherheit geht hier vor perfekter
-   optischer Naehe bei jedem Tempo.
-
-**Nebenfund beim Eigentest (aelterer, von diesem Feature unabhaengiger
-Bug):** der Autopilot machte in der Hoehle seit jeher einen kurzen
-"Tipp"-Sprung (`runner.capAt=0.02`, Scheitelhoehe ~65 statt ~126 beim
-vollen Sprung) - ein Relikt aus der Zeit, als die Decke selbst noch
-toedlich war (siehe 1.17). Ein deterministischer Hoehen-Test pro
-Kristall-Cluster-Breite und Tempo (kein Zufall, reine Sprungphysik) zeigt:
-dieser kurze Sprung reicht bei niedrigem Hoehlentempo (nahe `SPEED_START`)
-NICHT, um breite Kristall-Cluster (2-3 zusammenstehende Boden-Hindernisse)
-zu ueberspringen - unabhaengig davon, wann genau gesprungen wird (reine
-Geometrie: zu wenig Bodenstrecke oberhalb der Hindernishoehe waehrend der
-kurzen Flugzeit). Ein Stalaktit/eine Saeule wird davon nicht sicherer -
-beide treffen ohnehin jeden Sprung, kurz oder lang. Also gab es keinen
-Sicherheitsgrund mehr fuer den kurzen Tipp; er ist jetzt entfernt, die
-Hoehle springt genauso voll wie die Wueste. Verifiziert: derselbe
-Hoehen-Test zeigt danach "ok" fuer alle Cluster-Breiten ab `SPEED_START`.
-
-**Testmethodik-Faussfalle bei diesem Eigentest:** die im Browser-Tool
-geladene Seite laeuft weiter mit ihrer eigenen `requestAnimationFrame`-
-Schleife (echte Wanduhrzeit), auch waehrend ein Skript zusaetzlich manuell
-`update(dt)` aufruft - beide kaempften unbemerkt um denselben Zustand und
-erzeugten voellig unplausible Ergebnisse (u.a. 83% Fruehtod-Rate in einem
-ersten, falschen Testlauf). Fix fuer kuenftige Eigentests: vor jeder
-manuellen Simulation `window.requestAnimationFrame` auf eine No-Op-Funktion
-setzen, damit nur noch die manuellen `update()`-Aufrufe zaehlen.
-
-## Review-Fixes (1.56)
-
-Code-Review aller Apps (2026-09-15), alle Punkte im Browser verifiziert:
-
-- **Auto-Pause beim Verlassen der App**: `visibilitychange` mit
-  `document.hidden` ruft `pauseGame(true)` auf (still, ohne UI-Klick, der
-  sonst im gerade suspendierten AudioContext haengen bliebe). Vorher lief ein
-  Lauf nach Home-Taste/Anruf bei der Rueckkehr sofort weiter, oft mit
-  direktem Tod.
-- **Kein Muenz-Klang mehr im Menue**: der Vorfuehr-Bot sammelte Muenzen und
-  spielte dabei `SFX.equip()` ab - jetzt wie `addCoins()` nur im echten Spiel.
-- **"Bestwerte zuruecksetzen" gilt fuer alle drei Level**: vorher nur fuer
-  die Wueste, bei gewaehlter Hoehle/Lava passierte sichtbar nichts.
-- **Lava-Bodenzacken nutzen `LAVA_HAZARD_COLORS`**: die Palette war definiert,
-  aber nie verwendet - Level 3 zeigte blaue Hoehlenkristalle.
-- **Zurueck-Navigation**: siehe Abschnitt "Garderobe" (hoechstens ein
-  Verlaufseintrag, `pushAway()`/`leaveToMenu()`).
+**Dunkler Modus des Systems.** Die App faerbt sich selbst und laesst sich vom
+System nicht umfaerben; das Template von `apk-builder` schaltet dafuer "Force
+Dark" ab. Der Tag- und Nachtwechsel im Spiel ist davon unabhaengig.

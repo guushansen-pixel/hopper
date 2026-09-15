@@ -14,7 +14,7 @@
 #   BIRD/SNAKE/POISON_START/RAMP/TARGET, ROLL_ACCEL, MAX_ROLL_BONUS,
 #   MOUNTAIN_LEN/GAP_MIN/GAP_RAND, CAVE_MIN/MAX_GAP, CAVE_WAVELEN,
 #   STALACTITE/PILLAR_TIP_MIN/MAX, POISON_EXTRA, das Gift-Kopplungs-
-#   Zwangsabstand (600-750, siehe web/README.md "Gift sichtbar an
+#   Zwangsabstand (600-750, siehe hopper/CHANGELOG.md "Gift sichtbar an
 #   Schlangen gekoppelt").
 extends RefCounted
 class_name HopperSim
@@ -48,7 +48,7 @@ const SNAKE_TARGET := 0.20
 const POISON_START := 520.0
 const POISON_RAMP := 340.0
 const POISON_TARGET := 0.13
-# Siehe web/README.md ("Gift sichtbar an Schlangen gekoppelt", 1.30): 260-430
+# Siehe hopper/CHANGELOG.md ("Gift sichtbar an Schlangen gekoppelt", 1.30): 260-430
 # liess den Autopiloten das Gift bei hohem Tempo verpassen (reagiert pro
 # Frame nur auf das naechste Hindernis - der Sprung-Trigger der Schlange lag
 # zeitlich zu nah am Duck/Sprung-Trigger des Gifts). 600-750 gab 0 Treffer in
@@ -80,7 +80,7 @@ const PILLAR_TIP_MAX := 36.0
 const GROUND_Y := 600.0
 
 # Logische Bildschirmbreite (Spawn-Kante) - entspricht dem in dieser Sitzung
-# tatsaechlich am echten WebView-Build gemessenen LW-Wert (siehe README/Chat-
+# tatsaechlich am echten WebView-Build gemessenen LW-Wert (siehe godot/README.md/Chat-
 # Verlauf: LW=620 bei diesem Geraet/Viewport). Wird in Phase 3 durch die
 # echte Godot-Viewport-Breite ersetzt.
 const LW := 620.0
@@ -339,7 +339,7 @@ func _spawn_bird() -> void:
     var lanes := [GROUND_Y - 80.0, GROUND_Y - 54.0, GROUND_Y - 26.0]
     var base_y: float = lanes[rng.randi_range(0, 2)]
     # Schwarm/aktives Zufliegen (nur Hoehle) bewusst noch nicht portiert -
-    # gehoert an die Cave-Visuals in Phase 3, siehe README. Hier immer eine
+    # gehoert an die Cave-Visuals in Phase 3, siehe godot/README.md. Hier immer eine
     # einzelne "bird"/"bat"-Hitbox (kind-Name kosmetisch, Kollision identisch).
     obstacles.append({
         "kind": "bird", "x": LW + 20.0, "y": base_y, "w": 38.0, "h": 26.0,
