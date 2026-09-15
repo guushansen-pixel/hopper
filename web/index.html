@@ -398,7 +398,7 @@
       <span class="lbl">Tag- und Nachtwechsel<span class="sub">Farbwechsel alle 700 Punkte</span></span>
       <button class="switch" id="swCycle" role="switch" aria-checked="true" aria-label="Tag- und Nachtwechsel"></button>
     </div>
-    <button id="btnReset">Bestwert zuruecksetzen</button>
+    <button id="btnReset">Bestwerte zuruecksetzen (alle Level)</button>
   </div>
 </div>
 
@@ -1055,7 +1055,7 @@ function deathBurst(x, y) {
 // Saeulenstumpfs - dort spritzt Wasser sichtbar nach links UND rechts
 // auseinander statt rundum, deshalb zwei getrennte Winkel-Cluster (mit
 // Luecke dazwischen) statt eines durchgehenden Bereichs.
-function dripSplash(x, y, split) {
+function dripSplash(x, y, split, lava) {
   for (var i = 0; i < 4; i++) {
     var a;
     if (split) {
@@ -1065,8 +1065,9 @@ function dripSplash(x, y, split) {
       a = Math.PI + Math.random() * Math.PI;
     }
     var sp = 20 + Math.random() * 45;
-    spawnParticle(x, y, Math.cos(a) * sp, Math.sin(a) * sp * 0.5 - 30,
+    var sPart = spawnParticle(x, y, Math.cos(a) * sp, Math.sin(a) * sp * 0.5 - 30,
                   0.18 + Math.random() * 0.14, 1.5 + Math.random() * 1.6, "splash");
+    if (sPart) { sPart.lava = lava; }
   }
 }
 
@@ -1096,7 +1097,7 @@ function spawnObstacle() {
     for (var b = 0; b < swarm; b++) {
       obstacles.push({ kind: state.caveOn ? "bat" : "bird", x: LW + 20 + b * 46,
                        y: baseY, baseY: baseY, w: 38, h: 26, flap: Math.random() * 6,
-                       bobT: Math.random() * 6, diveExtra: 0 });
+                       bobT: Math.random() * 6, diveExtra: 0, lava: state.lavaOn });
     }
     return;
   }
@@ -1138,7 +1139,8 @@ function spawnStalactite() {
   var tip = STALACTITE_TIP_MIN + Math.random() * (STALACTITE_TIP_MAX - STALACTITE_TIP_MIN);
   var h = Math.max(10, gap - tip);
   obstacles.push({ kind: "stalactite", x: spawnX, y: groundY - gap, w: 34, h: h,
-                   seed: Math.random() * 1000 | 0, dripT: 40 + Math.random() * 200 });
+                   seed: Math.random() * 1000 | 0, dripT: 40 + Math.random() * 200,
+                   lava: state.lavaOn });
   return 170 + Math.random() * 80;
 }
 
@@ -1160,7 +1162,7 @@ function spawnPillar() {
   var h = Math.max(10, gap - tip);
   obstacles.push({ kind: "pillar", x: spawnX, y: groundY - gap, w: 30, h: h,
                    stubH: 12 + Math.random() * 8, seed: Math.random() * 1000 | 0,
-                   dripT: 40 + Math.random() * 200 });
+                   dripT: 40 + Math.random() * 200, lava: state.lavaOn });
   return 220 + Math.random() * 100;
 }
 
@@ -1201,7 +1203,8 @@ function spiderDropFraction(dist) {
 }
 function spawnSpider() {
   obstacles.push({ kind: "spider", x: LW + 20, w: SPIDER_W, h: SPIDER_H,
-                   y: groundY - ceilingGapAt(scrollCeiling + LW + 20), legT: Math.random() * 6.28 });
+                   y: groundY - ceilingGapAt(scrollCeiling + LW + 20), legT: Math.random() * 6.28,
+                   lava: state.lavaOn });
   return;
 }
 
@@ -1464,7 +1467,7 @@ function update(dt) {
     // (siehe landY oben) - danach ein kurzer Spritzer statt eines einfach
     // verblassenden Punkts.
     if (p.c === "drip" && p.y >= (p.landY !== undefined ? p.landY : groundY)) {
-      dripSplash(p.x, p.landY !== undefined ? p.landY : groundY, p.split);
+      dripSplash(p.x, p.landY !== undefined ? p.landY : groundY, p.split, p.lava);
       particles.splice(pi, 1);
     }
   }
@@ -1561,6 +1564,7 @@ function update(dt) {
         // rechts auseinander statt rundum (siehe dripSplash split-Zweig).
         if (dp) {
           dp.startY = dropY;
+          dp.lava = o.lava;
           if (o.kind === "pillar") { dp.landY = groundY - o.stubH; dp.split = true; }
           else { dp.landY = groundY; }
         }
@@ -1602,9 +1606,10 @@ function update(dt) {
       // die Bot-Demo im Hauptmenue-Hintergrund) - sonst waechst die
       // dauerhafte Waehrung auch ohne Zutun des Spielers, nur weil das Menue
       // offen war.
-      if (!state.attract) { addCoins(1); }
+      // Klang ebenso nur im echten Spiel - sonst "klingelt" das Hauptmenue
+      // alle paar Sekunden, wenn der Vorfuehr-Bot eine Muenze einsammelt.
+      if (!state.attract) { addCoins(1); SFX.equip(); }
       state.flash = 0.6;
-      SFX.equip();
     }
   }
   state.crystalIn -= dx;
@@ -1808,9 +1813,16 @@ var CAVE_SKY_TOP = "#05060a", CAVE_SKY_BOT = "#12151d";
 // die Hoehle sonst je nach Tageszeit draussen unterschiedlich hell wirken
 // liesse, obwohl unter Tage immer dieselbe Dunkelheit herrschen soll.
 var CAVE_ROCK = "#4b515c";
+// Level 3 (Lavahoehle): eigene, waermere Palette statt CAVE_SKY_*/CAVE_ROCK -
+// dunkler und roetlicher statt neutral grau, damit "tiefer/heisser" auch
+// optisch spuerbar ist, nicht nur durch neue Hindernis-Skins.
+var LAVA_SKY_TOP = "#0a0505", LAVA_SKY_BOT = "#1d0f0c";
+var LAVA_ROCK = "#3d2420";
+function zoneRock() { return state.lavaOn ? LAVA_ROCK : CAVE_ROCK; }
 function drawSky() {
   var g = ctx.createLinearGradient(0, 0, 0, groundY);
-  if (state.caveOn) { g.addColorStop(0, CAVE_SKY_TOP); g.addColorStop(1, CAVE_SKY_BOT); }
+  if (state.lavaOn) { g.addColorStop(0, LAVA_SKY_TOP); g.addColorStop(1, LAVA_SKY_BOT); }
+  else if (state.caveOn) { g.addColorStop(0, CAVE_SKY_TOP); g.addColorStop(1, CAVE_SKY_BOT); }
   else { g.addColorStop(0, theme.skyTop); g.addColorStop(1, theme.skyBot); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, LW, LH);
 }
@@ -1961,8 +1973,10 @@ function drawParticles() {
     // theme.dust folgt dem Tag/Nacht-Zyklus, ein Tropfen soll immer gleich
     // aussehen.
     ctx.globalAlpha = a * (p.c === "accent" ? 1 : 0.62);
+    // p.lava (siehe dripT-Spawn/dripSplash): Glut statt Wasser in der
+    // Lavahoehle - derselbe Partikeltyp/dieselbe Physik, nur warm gefaerbt.
     ctx.fillStyle = (p.c === "accent") ? theme.accent
-      : (p.c === "drip" || p.c === "splash") ? "#6fc3e0" : theme.dust;
+      : (p.c === "drip" || p.c === "splash") ? (p.lava ? "#ff8a3d" : "#6fc3e0") : theme.dust;
     var sizeMul = 0.35 + a * 0.65;
     // Ein "drip" waechst beim Fallen von klein (an der Spitze) zu groesser
     // (am Boden) statt eine feste Groesse zu behalten - passt zur selben
@@ -2105,7 +2119,7 @@ function drawCactus(o) {
     // Farbpalette (CRYSTAL_HAZARD_COLORS) - die Groesse (ganze Kaktus-Hoehe,
     // ueber die gesamte Cluster-Breite) bleibt der Hauptunterschied zum
     // kleinen, einzeln stehenden Sammelobjekt.
-    var hc = CRYSTAL_HAZARD_COLORS[o.variant || 0];
+    var hc = (state.lavaOn ? LAVA_HAZARD_COLORS : CRYSTAL_HAZARD_COLORS)[o.variant || 0];
     drawCrystalGlow(o.x + o.w / 2, groundY - o.ch * 0.55, o.w * 0.9 + o.ch * 0.5, hc.body);
     for (var j = 0; j < o.count; j++) {
       var sx = o.x + j * (o.cw + o.gap);
@@ -2193,13 +2207,20 @@ function drawBatWing(bx, by, side, lift) {
 // statt Schnabel, kleiner Augen-Glanzpunkt. Kontinuierlicher Flap-Winkel
 // (Math.sin) statt zweier fest geschalteter Posen - fluessigere Bewegung.
 function drawBat(o) {
-  G = ctx; ctx.fillStyle = theme.ground;
+  G = ctx;
+  // Lava-Variante ("Glutgeist"): gleiche Fluegel-/Kopf-Geometrie, aber warm
+  // gefaerbt statt der dunklen Fledermaus-Silhouette, plus ein Glimmer
+  // dahinter - liest sich wie eine andere Kreatur trotz identischer
+  // Schwarm-/Sturzflug-Mechanik (diveExtra, Autopilot-Vorhersage bleiben
+  // unveraendert fair, siehe autoPilot()-Kommentar).
+  ctx.fillStyle = o.lava ? "#ff9a4d" : theme.ground;
   var lift = Math.sin(o.flap) * 9;
   // Flugwelle nur in der Zeichnung, nicht in o.y (siehe Kommentar in
   // update()) - sonst verschiebt sich die echte Kollisionsbox und der
   // knappe Duck-Sicherheitsabstand reisst.
   var bobOffset = Math.sin(o.bobT * 3.4) * 5;
   var bx = o.x + 19, by = o.y + 13 + bobOffset;
+  if (o.lava) { drawCrystalGlow(bx, by, 26, "#ff8a3d"); }
   drawBatWing(bx, by, -1, lift);
   drawBatWing(bx, by, 1, lift);
   rr(bx - 6, by - 6, 12, 11, 5);
@@ -2278,11 +2299,12 @@ function drawCeiling() {
   ctx.lineTo(LW, groundY - ceilingGapAt(scrollCeiling + LW));
   ctx.lineTo(LW, 0);
   ctx.closePath();
-  // CAVE_ROCK statt theme.ground/groundFill - beide folgen dem Tag/Nacht-
-  // Zyklus (unterschiedlich stark, teils mit vertauschten Rollen), die Decke
-  // soll aber immer gleich dunkel aussehen. Tiefe/Textur kommt aus schwarzer
-  // Transparenz obendrauf - funktioniert unabhaengig vom Theme.
-  ctx.fillStyle = CAVE_ROCK;
+  // CAVE_ROCK/LAVA_ROCK statt theme.ground/groundFill - beide folgen dem
+  // Tag/Nacht-Zyklus (unterschiedlich stark, teils mit vertauschten Rollen),
+  // die Decke soll aber immer gleich dunkel/warm aussehen. Tiefe/Textur
+  // kommt aus schwarzer Transparenz obendrauf - funktioniert unabhaengig
+  // vom Theme.
+  ctx.fillStyle = zoneRock();
   ctx.fill();
   ctx.clip();
   var depthGrad = ctx.createLinearGradient(0, 0, 0, groundY);
@@ -2434,7 +2456,11 @@ function drawCaveArch(x) {
     ctx.closePath();
   }
   archPath(w, h);
-  ctx.fillStyle = CAVE_ROCK;   // fest wie drawCeiling, siehe dortiger Kommentar
+  // state.lavaOn ist waehrend DIESER Sequenz noch nicht wahr (wird erst am
+  // Ende von completeCaveLevel() gesetzt) - state.enteringToLava sagt schon
+  // jetzt, wohin die Sequenz fuehrt, damit der Torbogen fuer den Hoehle->
+  // Lava-Uebergang schon warm gefaerbt ist statt erst danach umzuspringen.
+  ctx.fillStyle = state.enteringToLava ? LAVA_ROCK : CAVE_ROCK;
   ctx.fill();
   ctx.save();
   archPath(w, h);
@@ -2488,13 +2514,19 @@ function shadeColor(hex, amt) {
   return "rgb(" + r + "," + g + "," + b + ")";
 }
 var ICICLE_LIGHT = shadeColor(CAVE_ROCK, 46), ICICLE_DARK = shadeColor(CAVE_ROCK, -36);
+// Lava-Variante: deutlich hellere Flecken (wirkt wie gluehende Adern statt
+// Fels-Sprenkel) auf dem dunkleren LAVA_ROCK-Grundton.
+var ICICLE_LIGHT_LAVA = shadeColor(LAVA_ROCK, 120), ICICLE_DARK_LAVA = shadeColor(LAVA_ROCK, -20);
 // Gesprenkelte Fels-Patches auf einem bereits gefuellten Dreieck (Vorlage:
 // Icon-Set mit mehrfarbigen Gesteinsflecken statt Flaechenfarbe) plus ein
 // duenner Grat als Rippenoptik. Geclippt auf dieselbe Kontur wie die
 // Fuellung, kann also nie ueber den Umriss hinausragen. o.seed haelt das
 // Fleckenmuster pro Objekt fest (dieselbe Ganzzahl-Hash-Technik wie
 // rockNoise() bei der Decke), sonst wuerde es beim Scrollen "wandern".
-function drawIcicleTexture(x, y, w, h, seed) {
+// lava=true waehlt die gluehende Adern-Palette statt der grauen Fels-Flecken.
+function drawIcicleTexture(x, y, w, h, seed, lava) {
+  var cLight = lava ? ICICLE_LIGHT_LAVA : ICICLE_LIGHT;
+  var cDark = lava ? ICICLE_DARK_LAVA : ICICLE_DARK;
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w / 2, y + h);
@@ -2503,25 +2535,28 @@ function drawIcicleTexture(x, y, w, h, seed) {
     var n1 = rockNoise(seed + i * 97), n2 = rockNoise(seed + i * 233 + 11);
     var px = x + n1 * w, py = y + (0.15 + n2 * 0.7) * h;
     var pr = w * (0.28 + rockNoise(seed + i * 61) * 0.22);
-    ctx.fillStyle = (i % 2 === 0) ? ICICLE_LIGHT : ICICLE_DARK;
+    ctx.fillStyle = (i % 2 === 0) ? cLight : cDark;
     ctx.globalAlpha = 0.68;
     ctx.beginPath(); ctx.arc(px, py, pr, 0, 6.2832); ctx.fill();
   }
-  ctx.strokeStyle = ICICLE_DARK; ctx.lineWidth = Math.max(1, w * 0.06); ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = cDark; ctx.lineWidth = Math.max(1, w * 0.06); ctx.globalAlpha = 0.55;
   ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.stroke();
   ctx.globalAlpha = 1;
   ctx.restore();
 }
 function drawStalactite(o) {
   G = ctx;
-  ctx.fillStyle = CAVE_ROCK;
+  ctx.fillStyle = o.lava ? LAVA_ROCK : CAVE_ROCK;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
   ctx.lineTo(o.x + o.w, o.y);
   ctx.lineTo(o.x + o.w / 2, o.y + o.h);
   ctx.closePath();
   ctx.fill();
-  drawIcicleTexture(o.x, o.y, o.w, o.h, o.seed || 0);
+  drawIcicleTexture(o.x, o.y, o.w, o.h, o.seed || 0, o.lava);
+  // Gluehende Spitze statt Eiszapfen-Look - derselbe Glimmer-Trick wie beim
+  // Boden-Hindernis/Sammelobjekt, nur an der Unterkante statt zentriert.
+  if (o.lava) { drawCrystalGlow(o.x + o.w / 2, o.y + o.h, o.w * 0.9, "#ff8a3d"); }
 }
 // Tropfsteinsaeule: wie drawStalactite (der haengende Teil ist die echte
 // Kollisionsbox), plus ein rein dekorativer Stumpf vom Boden aus - zusammen
@@ -2529,14 +2564,15 @@ function drawStalactite(o) {
 // durch den man ducken muss. o.stubH ist nur Optik, keine eigene Kollision.
 function drawPillar(o) {
   G = ctx;
-  ctx.fillStyle = CAVE_ROCK;
+  ctx.fillStyle = o.lava ? LAVA_ROCK : CAVE_ROCK;
   ctx.beginPath();
   ctx.moveTo(o.x, o.y);
   ctx.lineTo(o.x + o.w, o.y);
   ctx.lineTo(o.x + o.w / 2, o.y + o.h);
   ctx.closePath();
   ctx.fill();
-  drawIcicleTexture(o.x, o.y, o.w, o.h, o.seed || 0);
+  drawIcicleTexture(o.x, o.y, o.w, o.h, o.seed || 0, o.lava);
+  if (o.lava) { drawCrystalGlow(o.x + o.w / 2, o.y + o.h, o.w * 0.9, "#ff8a3d"); }
   var sx = o.x + o.w / 2;
   ctx.beginPath();
   ctx.moveTo(sx - o.w * 0.4, groundY);
@@ -2558,6 +2594,13 @@ var CRYSTAL_HAZARD_COLORS = [
   { body: "#3a6fd8", facet: "#c9dcff" },
   { body: "#2ab7a0", facet: "#bdf3e6" },
   { body: "#5a5fc7", facet: "#d6d8ff" }
+];
+// Lava-Pendant: gluehende Basalt-/Glutzacken statt Kristallfacetten, gleiche
+// drawCrystalSpike()-Zeichnung/Groesse (siehe drawCactus).
+var LAVA_HAZARD_COLORS = [
+  { body: "#ff6a1f", facet: "#ffd39a" },
+  { body: "#d9391f", facet: "#ffb37a" },
+  { body: "#ff8a3d", facet: "#ffe4b3" }
 ];
 // Weicher Farbschein hinter einem Kristall-Cluster - dieselbe Technik wie
 // der bisherige Sammelobjekt-Glimmer, jetzt als eigene Funktion, damit auch
@@ -2685,10 +2728,14 @@ function drawSpider(o) {
   var ceilY = groundY - gap;
   var cx = o.x + o.w * 0.5, cy = o.y + o.h * 0.5;
   var t = state.time * 9 + o.legT;
-  ctx.strokeStyle = "rgba(224,228,234,0.5)"; ctx.lineWidth = 1;
+  var rock = o.lava ? LAVA_ROCK : CAVE_ROCK;
+  // Lava-Variante ("Magmawurm"): gluehender Faden/Umriss statt Spinnenfaden,
+  // plus Glimmer um den Koerper - sonst identische Absprung-/Bein-Mechanik.
+  ctx.strokeStyle = o.lava ? "rgba(255,138,61,0.6)" : "rgba(224,228,234,0.5)"; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(cx, ceilY); ctx.lineTo(cx, cy - o.h * 0.35); ctx.stroke();
   ctx.globalAlpha = 0.4 + 0.6 * o.dropFrac;
-  ctx.strokeStyle = CAVE_ROCK; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+  if (o.lava) { drawCrystalGlow(cx, cy, o.w * 1.1, "#ff8a3d"); }
+  ctx.strokeStyle = rock; ctx.lineWidth = 1.6; ctx.lineCap = "round";
   for (var s = -1; s <= 1; s += 2) {
     for (var l = 0; l < 4; l++) {
       var ang = (l - 1.5) * 0.5 + Math.sin(t + l) * 0.10;
@@ -2697,7 +2744,7 @@ function drawSpider(o) {
       ctx.beginPath(); ctx.moveTo(cx + s * o.w * 0.22, cy); ctx.lineTo(lx, ly); ctx.stroke();
     }
   }
-  ctx.fillStyle = CAVE_ROCK;
+  ctx.fillStyle = rock;
   ctx.beginPath(); ctx.ellipse(cx, cy, o.w * 0.42, o.h * 0.42, 0, 0, 6.2832); ctx.fill();
   ctx.fillStyle = "#ff5252";
   ctx.beginPath(); ctx.arc(cx - 2.6, cy - 1, 1.3, 0, 6.2832); ctx.fill();
@@ -2994,21 +3041,41 @@ function toMenu() {
   refreshMenu();
   show("menu");
 }
+// Damit die Android-Zurueck-Taste ins Menue fuehrt statt die App zu beenden:
+// die WebView-Activity ruft goBack(), wenn es Verlauf gibt. Hoechstens EIN
+// "weg vom Menue"-Eintrag - frueher pushte jedes Spielen/"Nochmal" einen
+// neuen, keiner wurde je entfernt, und im Menue musste man danach mehrfach
+// Zurueck druecken, bis die App schloss. Garderobe/Shop/Einstellungen hatten
+// umgekehrt gar keinen Eintrag, dort beendete Zurueck die App.
+function pushAway() {
+  if (history.state) { return; }
+  try { history.pushState({ s: "away" }, ""); } catch (e) {}
+}
+// In-App-Wege zurueck ins Menue: den eigenen Eintrag per history.back()
+// abbauen, die eigentliche Navigation macht der popstate-Handler.
+function leaveToMenu() {
+  if (history.state) {
+    try { history.back(); return; } catch (e) {}
+  }
+  musicStop(); toMenu();
+}
 function startGame() {
   audioInit();
   newGame(false);
   show("game");
-  // Damit die Android-Zurueck-Taste ins Menue fuehrt statt die App zu
-  // beenden: die WebView-Activity ruft goBack(), wenn es Verlauf gibt.
-  try { history.pushState({ s: "game" }, ""); } catch (e) {}
+  pushAway();
   if (settings.music) { musicStart(); }
 }
-function pauseGame() {
+// silent === true (strikt, weil der Klick-Handler ein Event-Objekt uebergibt):
+// kein UI-Klick, z.B. beim Auto-Pause ueber visibilitychange - der Ton wuerde
+// sonst im gerade suspendierten AudioContext haengen und bei Rueckkehr spielen.
+function pauseGame(silent) {
   if (screen !== "game" || state.phase !== "running") { return; }
   document.getElementById("pScoreLabel").textContent = state.caveOn ? "Punkte" : "Fortschritt";
   document.getElementById("pScore").textContent = fmtScore(state.score, state.caveOn);
   document.getElementById("pHigh").textContent = fmtScore(state.high, state.caveOn);
-  show("paused"); SFX.ui();
+  show("paused");
+  if (silent !== true) { SFX.ui(); }
 }
 function resumeGame() { show("game"); lastTime = 0; SFX.ui(); }
 function showGameOver(record) {
@@ -3038,12 +3105,13 @@ function showLevelComplete(opts) {
   document.getElementById("btnAgain").textContent = opts.nextLabel || "Level 2 spielen";
   setTimeout(function () { if (state.phase === "cleared") { show("over"); } }, 420);
 }
-function openSettings(from) { settingsFrom = from; syncSwitches(); show("settings"); SFX.ui(); }
+// Aus der Pause heraus existiert der Spiel-Eintrag schon - pushAway() ist
+// dann ein No-op, Zurueck fuehrt ueber popstate wieder in die Pause.
+function openSettings(from) { settingsFrom = from; syncSwitches(); show("settings"); pushAway(); SFX.ui(); }
 function closeSettings() {
-  SFX.ui();
-  if (settingsFrom === "paused") { show("paused"); } else { toMenu(); }
+  if (settingsFrom === "paused") { SFX.ui(); show("paused"); } else { leaveToMenu(); }
 }
-function openWardrobe() { audioInit(); syncLook(); show("wardrobe"); SFX.ui(); }
+function openWardrobe() { audioInit(); syncLook(); show("wardrobe"); pushAway(); SFX.ui(); }
 
 // Padlock-Icon fuer gesperrte Garderobe-/Shop-Eintraege - dieselbe SVG wie
 // beim Hoehlen-Schloss (siehe #lvlCaveLock), hier aber wiederverwendbar per
@@ -3196,7 +3264,7 @@ function refreshShop() {
     s.priceEl.textContent = owned ? "" : String(s.item.price);
   });
 }
-function openShop() { refreshShop(); show("shop"); SFX.ui(); }
+function openShop() { refreshShop(); show("shop"); pushAway(); SFX.ui(); }
 
 // --- Schalter ---
 var SWITCHES = [
@@ -3293,28 +3361,35 @@ elLvlLava.addEventListener("click", function () {
 });
 document.getElementById("btnPlay").addEventListener("click", function () { SFX.ui(); startGame(); });
 document.getElementById("btnWardrobe").addEventListener("click", openWardrobe);
-document.getElementById("wBack").addEventListener("click", function () { SFX.ui(); toMenu(); });
+// Garderobe/Shop/Einstellungen: der UI-Klick kommt aus dem popstate-Handler.
+document.getElementById("wBack").addEventListener("click", leaveToMenu);
 document.getElementById("btnShop").addEventListener("click", openShop);
-document.getElementById("shopBack").addEventListener("click", function () { SFX.ui(); toMenu(); });
+document.getElementById("shopBack").addEventListener("click", leaveToMenu);
 elGear.addEventListener("click", function () { audioInit(); openSettings("menu"); });
 document.getElementById("btnBack").addEventListener("click", closeSettings);
 document.getElementById("btnResume").addEventListener("click", resumeGame);
 document.getElementById("btnPauseSettings").addEventListener("click", function () { openSettings("paused"); });
-document.getElementById("btnQuit").addEventListener("click", function () { SFX.ui(); musicStop(); toMenu(); });
+document.getElementById("btnQuit").addEventListener("click", function () { SFX.ui(); leaveToMenu(); });
 document.getElementById("btnAgain").addEventListener("click", function () { SFX.ui(); startGame(); });
-document.getElementById("btnMenu").addEventListener("click", function () { SFX.ui(); musicStop(); toMenu(); });
+document.getElementById("btnMenu").addEventListener("click", function () { SFX.ui(); leaveToMenu(); });
 document.getElementById("btnReset").addEventListener("click", function () {
-  writeNum(HIGH_KEY, 0); writeNum(LAST_KEY, 0);
+  // Alle drei Level, nicht nur die Wueste - sonst passiert bei gewaehlter
+  // Hoehle/Lava sichtbar nichts, und deren Bestwerte waeren nie loeschbar.
+  [HIGH_KEY, LAST_KEY, CAVE_HIGH_KEY, CAVE_LAST_KEY, LAVA_HIGH_KEY, LAVA_LAST_KEY]
+    .forEach(function (k) { writeNum(k, 0); });
   if (state) { state.high = 0; state.last = 0; }
   refreshMenu(); SFX.ui();
 });
 elPause.addEventListener("click", pauseGame);
 
 window.addEventListener("popstate", function () {
-  if (screen === "game" || screen === "paused" || screen === "over") { musicStop(); toMenu(); }
-  else if (screen === "settings") { closeSettings(); }
-  else if (screen === "wardrobe") { toMenu(); }
-  else if (screen === "shop") { toMenu(); }
+  if (screen === "settings" && settingsFrom === "paused") {
+    // Einstellungen aus der Pause: Zurueck fuehrt in die Pause, nicht ins
+    // Menue - der gerade verbrauchte Spiel-Eintrag wird wieder hergestellt.
+    pushAway(); SFX.ui(); show("paused");
+  }
+  else if (screen === "game" || screen === "paused" || screen === "over") { musicStop(); toMenu(); }
+  else if (screen === "settings" || screen === "wardrobe" || screen === "shop") { SFX.ui(); toMenu(); }
 });
 
 function firstGesture() {
@@ -3328,6 +3403,9 @@ document.addEventListener("touchstart", firstGesture);
 document.addEventListener("keydown", firstGesture);
 
 document.addEventListener("visibilitychange", function () {
+  // App verlassen (Home-Taste, Anruf, Benachrichtigung) pausiert einen
+  // laufenden Lauf - sonst geht er bei der Rueckkehr ohne Vorwarnung weiter.
+  if (document.hidden) { pauseGame(true); }
   if (!audioReady) { return; }
   if (document.hidden) { AC.suspend(); } else { AC.resume(); lastTime = 0; }
 });

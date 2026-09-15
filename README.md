@@ -283,7 +283,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.30" -VersionCode 33 -Force
+              -VersionName "1.56" -VersionCode 61 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
@@ -375,8 +375,15 @@ Dahinter laeuft das Spiel im Vorfuehrmodus weiter. Der Autopilot in
 Gemessen: 15 Minuten bis Hoechsttempo, 896 Spruenge, 0 Zusammenstoesse.
 
 Die Android-Zurueck-Taste fuehrt ins Menue statt die App zu beenden. Dafuer
-legt `startGame()` einen `history.pushState` an - die WebView-Activity ruft
-dann `goBack()`, was `popstate` ausloest.
+legt `pushAway()` einen `history.pushState` an - die WebView-Activity ruft
+dann `goBack()`, was `popstate` ausloest. Es gibt hoechstens EINEN solchen
+Eintrag (Spiel, Garderobe, Shop, Einstellungen teilen ihn), und die
+In-App-Zurueck-Knoepfe bauen ihn ueber `leaveToMenu()` -> `history.back()`
+wieder ab. Vorher pushte jedes Spielen/"Nochmal" einen neuen Eintrag, der nie
+entfernt wurde (im Menue musste man danach mehrfach Zurueck druecken, bis die
+App schloss), waehrend Garderobe/Shop/Einstellungen gar keinen hatten (dort
+beendete Zurueck die App). Einstellungen aus der Pause heraus: Zurueck fuehrt
+wieder in die Pause.
 
 ## Staffelung der Bedienelemente
 
@@ -1459,3 +1466,21 @@ erzeugten voellig unplausible Ergebnisse (u.a. 83% Fruehtod-Rate in einem
 ersten, falschen Testlauf). Fix fuer kuenftige Eigentests: vor jeder
 manuellen Simulation `window.requestAnimationFrame` auf eine No-Op-Funktion
 setzen, damit nur noch die manuellen `update()`-Aufrufe zaehlen.
+
+## Review-Fixes (1.56)
+
+Code-Review aller Apps (2026-09-15), alle Punkte im Browser verifiziert:
+
+- **Auto-Pause beim Verlassen der App**: `visibilitychange` mit
+  `document.hidden` ruft `pauseGame(true)` auf (still, ohne UI-Klick, der
+  sonst im gerade suspendierten AudioContext haengen bliebe). Vorher lief ein
+  Lauf nach Home-Taste/Anruf bei der Rueckkehr sofort weiter, oft mit
+  direktem Tod.
+- **Kein Muenz-Klang mehr im Menue**: der Vorfuehr-Bot sammelte Muenzen und
+  spielte dabei `SFX.equip()` ab - jetzt wie `addCoins()` nur im echten Spiel.
+- **"Bestwerte zuruecksetzen" gilt fuer alle drei Level**: vorher nur fuer
+  die Wueste, bei gewaehlter Hoehle/Lava passierte sichtbar nichts.
+- **Lava-Bodenzacken nutzen `LAVA_HAZARD_COLORS`**: die Palette war definiert,
+  aber nie verwendet - Level 3 zeigte blaue Hoehlenkristalle.
+- **Zurueck-Navigation**: siehe Abschnitt "Garderobe" (hoechstens ein
+  Verlaufseintrag, `pushAway()`/`leaveToMenu()`).
