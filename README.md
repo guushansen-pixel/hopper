@@ -2,7 +2,7 @@
 
 Endless Runner als reine Web-App, die per [apk-builder](../apk-builder)
 zu einer Android-APK wird. Laeuft komplett offline, ohne Abhaengigkeiten,
-alles in einer Datei (`web/index.html`). Stand: **1.56** (versionCode 61).
+alles in einer Datei (`web/index.html`). Stand: **1.57** (versionCode 62).
 
 Diese README ist die **aktuelle Referenz**. Weitere Dokumente:
 
@@ -22,7 +22,7 @@ gewaehlt, sobald es freigeschaltet ist:
 |---|---|---|
 | 1 Wueste | Fortschritt in Prozent, 100% bei Rohscore 3000 (`CAVE_START`) -> schaltet die Hoehle frei | Kaktus-Gruppen, Voegel (drei Hoehen), Schlangen; seltene Bergabschnitte nur mit rollenden Felsen |
 | 2 Hoehle | Punkte; bei 4000 (`LAVA_START`) -> schaltet die Lavahoehle frei | Kristallzacken (Kaktus-Hitbox), Fledermaeuse (Schwarm, fliegen aktiv zu), Haengespinne (Duck-Fenster), Stalaktit (nicht springen), Tropfsteinsaeule (ducken) |
-| 3 Lavahoehle | Punkte, offenes Ende | wie Level 2, mit Glut-/Lava-Optik |
+| 3 Lavahoehle | Punkte, offenes Ende | wie Level 2 als Glut-/Lava-Varianten; statt Lichtloechern und Spinnweben staerkerer Lavaschein und aufsteigende Glutfunken |
 
 Die Schwierigkeit steigt ueber Rampen statt harter Schwellen (`rampChance`).
 Die Hoehlendecke ist reine Optik ohne Kollision. Ein Levelabschluss laeuft
@@ -68,7 +68,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.56" -VersionCode 61 -Force
+              -VersionName "1.57" -VersionCode 62 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 

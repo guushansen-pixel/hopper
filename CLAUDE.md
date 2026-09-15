@@ -47,7 +47,8 @@ setzen, sonst kaempft die echte Spielschleife mit den manuellen
 `update(dt)`-Aufrufen um denselben Zustand.
 
 APK bauen: Befehl in README "Bauen"; `-VersionName`/`-VersionCode` bei jeder
-Auslieferung hochzaehlen (Stand 1.56 / 61) und das Beispiel in der README
+Auslieferung hochzaehlen (Stand 1.57 / 62, siehe auch
+`apk-builder\apps\Hopper\app\build.gradle.kts`) und das Beispiel in der README
 mitziehen. Ergebnis landet in `apk-builder\out\`.
 
 Nur auf dem echten Geraet (Pixel 11 Pro) pruefbar: Ruckeln/Performance,

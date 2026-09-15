@@ -1032,3 +1032,21 @@ Code-Review aller Apps (2026-09-15), alle Punkte im Browser verifiziert:
   aber nie verwendet - Level 3 zeigte blaue Hoehlenkristalle.
 - **Zurueck-Navigation**: siehe Abschnitt "Garderobe" (hoechstens ein
   Verlaufseintrag, `pushAway()`/`leaveToMenu()`).
+
+## Level 3 Phase B: Glut-Atmosphaere (1.57)
+
+Schliesst die Lava-Optik ab (Commit 833611c; Fels-/Himmelpalette und die
+Reskins von Stalaktit, Saeule, Spinne, Fledermaus und Bodenzacken gab es
+schon vorher):
+
+- `drawCaveLightHoles()` und `drawCobwebs()` kehren bei `state.lavaOn` frueh
+  zurueck - Sonnenlicht-Loecher und Spinnweben passen so tief unten nicht.
+- `drawCaveGlow()` reicht in der Lavahoehle deutlich hoeher (70 -> 140) und
+  ist etwa 2,5x kraeftiger - dort ist die Waerme die Umgebung.
+- Neuer Partikeltyp `ember`: aufsteigende Glutfunken, realzeit-getaktet
+  (`state.emberT`) statt distanzbasiert, weil rein atmosphaerisch. Kraeftiger
+  Aufwaerts-Impuls plus kurze Lebenszeit, damit die allgemeine
+  Partikel-Schwerkraft sie nicht sichtbar herunterzieht.
+
+Verifiziert: 300s-Lava-Soak und 180s-Regressionssoaks Hoehle/Wueste
+fehlerfrei; Glutfunken nur in der Lavahoehle.
