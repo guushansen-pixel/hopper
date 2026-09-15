@@ -1002,7 +1002,7 @@ function newGame(attract) {
     caveOn: startInCave || startInLava, caveVis: (startInCave || startInLava) ? 1 : 0,
     lavaOn: startInLava,
     entering: false, enterT: 0, enterArchX: 0, enteringToLava: false,
-    bonus: 0, crystalIn: 260
+    bonus: 0, crystalIn: 260, emberT: 0.3
   };
   runner = {
     y: 0, vy: 0, w: 44, h: 47, ducking: false, onGround: true,
@@ -1455,6 +1455,23 @@ function update(dt) {
     runner.dustT -= dt;
     if (runner.dustT <= 0) { runner.dustT = 0.085; dustPuff(RUNNER_X + 8, groundY, 1, 55); }
   }
+  // Aufsteigende Glut vom Boden - reine Atmosphaere fuer die Lavahoehle,
+  // an keine Weltposition gebunden (anders als die Deckendetails), deshalb
+  // reicht ein einfacher Echtzeit-Timer statt einer distanzbasierten
+  // world-x-Technik. Kraeftiger Aufwaerts-Impuls + kurze Lebenszeit, damit
+  // die Schwerkraft (siehe Partikel-Update unten, gilt fuer alle Partikel-
+  // typen gleich) sie nicht schon sichtbar wieder herunterzieht, bevor sie
+  // verblasst sind - derselbe Trick wie bei den kurzlebigen Staubpuffs.
+  if (state.lavaOn) {
+    state.emberT -= dt;
+    if (state.emberT <= 0) {
+      state.emberT = 0.12 + Math.random() * 0.22;
+      var ex = Math.random() * LW;
+      spawnParticle(ex, groundY - Math.random() * 8,
+                    (Math.random() - 0.5) * 20, -90 - Math.random() * 60,
+                    0.35 + Math.random() * 0.25, 1 + Math.random() * 1.4, "ember");
+    }
+  }
 
   for (var pi = particles.length - 1; pi >= 0; pi--) {
     var p = particles[pi];
@@ -1905,11 +1922,16 @@ function drawClouds() {
 function drawCaveGlow() {
   if (!state.caveOn) { return; }
   var pulse = 0.5 + 0.5 * Math.sin(state.time * 0.6);
-  var g = ctx.createLinearGradient(0, groundY - 70, 0, groundY);
+  // In der Lavahoehle deutlich staerker/hoeher reichend als der sonstige
+  // ferne Glutschein - hier IST die Waerme die Umgebung, nicht nur ein
+  // Farbtupfer.
+  var reach = state.lavaOn ? 140 : 70;
+  var baseA = state.lavaOn ? 0.22 : 0.09, pulseA = state.lavaOn ? 0.12 : 0.06;
+  var g = ctx.createLinearGradient(0, groundY - reach, 0, groundY);
   g.addColorStop(0, "rgba(220,110,40,0)");
-  g.addColorStop(1, "rgba(220,110,40," + (0.09 + 0.06 * pulse).toFixed(3) + ")");
+  g.addColorStop(1, "rgba(220,110,40," + (baseA + pulseA * pulse).toFixed(3) + ")");
   ctx.fillStyle = g;
-  ctx.fillRect(0, groundY - 70, LW, 70);
+  ctx.fillRect(0, groundY - reach, LW, reach);
 }
 function drawGround() {
   // Wie die Decke (CAVE_SKY_TOP/BOT) haengt der Hoehlenboden nicht am
@@ -1972,10 +1994,13 @@ function drawParticles() {
     // theme.dust - dieselbe Begruendung wie ueberall sonst in der Hoehle:
     // theme.dust folgt dem Tag/Nacht-Zyklus, ein Tropfen soll immer gleich
     // aussehen.
-    ctx.globalAlpha = a * (p.c === "accent" ? 1 : 0.62);
+    ctx.globalAlpha = a * (p.c === "accent" || p.c === "ember" ? 1 : 0.62);
     // p.lava (siehe dripT-Spawn/dripSplash): Glut statt Wasser in der
     // Lavahoehle - derselbe Partikeltyp/dieselbe Physik, nur warm gefaerbt.
+    // "ember" (aufsteigende Glut vom Boden, siehe update()) ist ein eigener,
+    // fester warmer Ton, unabhaengig vom Theme.
     ctx.fillStyle = (p.c === "accent") ? theme.accent
+      : (p.c === "ember") ? "#ff9a3d"
       : (p.c === "drip" || p.c === "splash") ? (p.lava ? "#ff8a3d" : "#6fc3e0") : theme.dust;
     var sizeMul = 0.35 + a * 0.65;
     // Ein "drip" waechst beim Fallen von klein (an der Spitze) zu groesser
@@ -2384,7 +2409,9 @@ var LIGHT_HOLE_STEP = 1100;
 // wie jedes andere scrollende Objekt, kein Despawn.
 var LIGHT_HOLE_EDGE = 90;
 function drawCaveLightHoles() {
-  if (state.caveVis <= 0.01) { return; }
+  // So tief unten (Lavahoehle) faellt kein Tageslicht mehr ein - dort
+  // uebernimmt der Lavaschein/die Glut-Partikel die "Tiefe"-Wirkung.
+  if (state.caveVis <= 0.01 || state.lavaOn) { return; }
   G = ctx;
   ctx.save();
   var first = Math.floor((scrollCeiling - LIGHT_HOLE_EDGE) / LIGHT_HOLE_STEP);
@@ -2820,7 +2847,8 @@ function drawCobweb(cx, cy, flip) {
   }
 }
 function drawCobwebs() {
-  if (!state.caveOn) { return; }
+  // Spinnweben passen thematisch nicht in die Lavahoehle.
+  if (!state.caveOn || state.lavaOn) { return; }
   drawCobweb(0, 0, false);
   drawCobweb(LW, 0, true);
 }
