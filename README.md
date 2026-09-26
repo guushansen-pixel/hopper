@@ -196,10 +196,12 @@ In-App-Zurueck-Knoepfe bauen ihn ueber `leaveToMenu()` -> `history.back()`
 wieder ab. Einstellungen aus der Pause heraus: Zurueck fuehrt wieder in die
 Pause.
 
-Offen: Die Zurueck-**Wischgeste** (Predictive Back, targetSdk 36) umgeht
-`onKeyDown` und schliesst die App direkt. Der Fix aus breathe-well/ice-breath
-braucht einen eigenen `build.ps1`-Wrapper, den Hopper nicht hat (siehe
-`apk-builder/CLAUDE.md`, "Bekannte Stolperstellen").
+Die Zurueck-**Wischgeste** (Predictive Back, targetSdk 36) umgeht
+`onKeyDown` und schloss die App bis 1.57 direkt. Seit 2026-09-24 registriert
+das apk-builder-Template selbst einen `OnBackInvokedCallback` (siehe
+`apk-builder/CLAUDE.md`, "Bekannte Stolperstellen") - ein eigener
+`build.ps1`-Wrapper ist dafuer nicht mehr noetig. Greift ab dem naechsten
+`new-app.ps1 -Force`; am Geraet noch nicht gegengeprueft.
 
 ## Stolperfallen im Menue-Code
 
