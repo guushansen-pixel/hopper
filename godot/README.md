@@ -6,6 +6,16 @@ Migrationsprotokoll (Phase 0-7), aus der Hopper-README ausgelagert. Offene
 Punkte fuer einen spaeteren Wiedereinstieg stehen im Plan
 `C:\Users\Daniel\.claude\plans\kannst-du-hier-direkt-indexed-pelican.md`
 (Abschnitt "Visueller/UI-Vollausbau", Phase 8-13).
+
+> **Achtung beim Exportieren:** `export_presets.cfg` traegt dieselbe
+> Paket-ID wie die ausgelieferte WebView-App (`com.daniel.hopper`) und wird
+> mit demselben Keystore signiert. Android behandelt eine Godot-APK deshalb
+> als **Update** der installierten App, nicht als zweite App. Heute scheitert
+> die Installation noch am Versionscode (Godot 34 < WebView 62, "Downgrade"),
+> aber sobald ihn jemand hochzieht, ersetzt die Godot-Version die
+> WebView-App - samt Verlust von Muenzen, Shop-Freischaltungen und
+> Bestwerten, die im WebView-localStorage liegen. Fuer Testbuilds deshalb
+> `package/unique_name` voruebergehend auf `com.daniel.hopper.godot` stellen.
 ## Migrationsprotokoll (Phase 0-7, abgeschlossen)
 
 `web/` blieb die ganze Migration ueber unveraendert als Fallback. Grund fuer
