@@ -2,7 +2,7 @@
 
 Endless Runner als reine Web-App, die per [apk-builder](../apk-builder)
 zu einer Android-APK wird. Laeuft komplett offline, ohne Abhaengigkeiten,
-alles in einer Datei (`web/index.html`). Stand: **1.57** (versionCode 62).
+alles in einer Datei (`web/index.html`). Stand: **1.58** (versionCode 63).
 
 Diese README ist die **aktuelle Referenz**. Weitere Dokumente:
 
@@ -68,7 +68,7 @@ cd "D:\claude code projects\apk-builder"
               -WebRoot "D:\claude code projects\hopper\web" `
               -Icon "D:\claude code projects\hopper\icon.xml" `
               -IconBackground "#E4703A" `
-              -VersionName "1.57" -VersionCode 62 -Force
+              -VersionName "1.58" -VersionCode 63 -Force
 .\build-apk.ps1 -App Hopper -Release
 ```
 
